@@ -26,3 +26,6 @@
 CLAUDE.md
 MIGRATION-CHECKLIST.md
 OPTIMIZATION-LOG.md
+
+# 測試目錄
+tests/

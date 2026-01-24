@@ -1,21 +1,48 @@
 #!/bin/bash
 # subagent-validator.sh - 驗證 Agent 輸出 + 記錄狀態
-# 事件: SubagentStop
+# 事件: SubagentStop 或 PostToolUse(Task)
 # 功能: 確保 Agent 輸出符合預期格式，並記錄狀態供流程控制
 # 2025 AI Guardrails: Post-hook Validation + State Management
 # 支援: 並行任務隔離（基於 Change ID）
 
+# DEBUG: 記錄 hook 被呼叫
+echo "[$(date)] subagent-validator.sh called" >> /tmp/claude-workflow-debug.log
+
 # 讀取 stdin 的 JSON 輸入
 INPUT=$(cat)
+echo "[$(date)] Validator INPUT: $INPUT" >> /tmp/claude-workflow-debug.log
 
 # 狀態目錄
 STATE_DIR="${PWD}/.claude"
 mkdir -p "$STATE_DIR" 2>/dev/null
 
-# 解析輸出
-AGENT_NAME=$(echo "$INPUT" | jq -r '.agent_name // empty' | tr '[:upper:]' '[:lower:]')
-OUTPUT=$(echo "$INPUT" | jq -r '.output // empty')
-PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty')
+# 檢測輸入來源（SubagentStop vs PostToolUse）
+HOOK_EVENT=$(echo "$INPUT" | jq -r '.hook_event_name // empty')
+echo "[$(date)] Hook Event: $HOOK_EVENT" >> /tmp/claude-workflow-debug.log
+
+# 解析 Agent 名稱和輸出（根據不同事件類型）
+if [ "$HOOK_EVENT" = "PostToolUse" ]; then
+    # PostToolUse(Task): 從 tool_input 獲取 subagent_type
+    RAW_AGENT_NAME=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty' | tr '[:upper:]' '[:lower:]')
+    OUTPUT=$(echo "$INPUT" | jq -r '.tool_result // empty')
+    PROMPT=$(echo "$INPUT" | jq -r '.tool_input.prompt // empty')
+else
+    # SubagentStop: 從 agent_name 或讀取 transcript
+    RAW_AGENT_NAME=$(echo "$INPUT" | jq -r '.agent_name // .subagent_type // empty' | tr '[:upper:]' '[:lower:]')
+    OUTPUT=$(echo "$INPUT" | jq -r '.output // empty')
+    PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty')
+fi
+
+# 移除 plugin 前綴（如 "claude-workflow:developer" → "developer"）
+AGENT_NAME=$(echo "$RAW_AGENT_NAME" | sed 's/.*://')
+
+echo "[$(date)] AGENT_NAME: $AGENT_NAME (raw: $RAW_AGENT_NAME)" >> /tmp/claude-workflow-debug.log
+
+# 如果沒有 Agent 名稱，退出（不是我們的 plugin agent）
+if [ -z "$AGENT_NAME" ]; then
+    echo "[$(date)] No agent name found, skipping" >> /tmp/claude-workflow-debug.log
+    exit 0
+fi
 
 # 嘗試從 prompt 或 output 中解析 Change ID
 CHANGE_ID=""

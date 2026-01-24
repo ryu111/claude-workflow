@@ -19,7 +19,19 @@
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workflow-gate.sh",
-            "timeout": 10
+            "timeout": 10,
+            "statusMessage": "🔄 D→R→T 流程檢查中..."
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/agent-status-display.sh",
+            "timeout": 5
           }
         ]
       }
@@ -58,6 +70,16 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-validator.sh",
+            "timeout": 10
+          }
+        ]
+      },
       {
         "matcher": "Write|Edit",
         "hooks": [
