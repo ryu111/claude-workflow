@@ -41,7 +41,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/validate-skills.sh
 
 請按以下步驟執行驗證：
 
-1. **定位 skills 目錄**：查找 `.claude-plugin/skills/` 或 `skills/` 目錄
+1. **定位 skills 目錄**：查找 `skills/` 目錄
 
 2. **對每個 skill 執行**：
    ```bash

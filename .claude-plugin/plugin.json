@@ -1,9 +1,9 @@
 {
   "name": "claude-workflow",
   "version": "0.1.0",
-  "description": "自動化商業工作流系統 - D→R→T 流程",
-  "skills": "skills/",
-  "agents": "agents/",
-  "hooks": "hooks/hooks.json",
-  "commands": "../commands/"
+  "description": "自動化 D→R→T (Developer → Reviewer → Tester) 工作流程系統",
+  "author": {
+    "name": "ryu111",
+    "email": "ryu111@users.noreply.github.com"
+  }
 }

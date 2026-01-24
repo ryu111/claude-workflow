@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "claude-workflow",
+  "version": "0.1.0",
+  "description": "自動化 D→R→T (Developer → Reviewer → Tester) 工作流程系統",
+  "owner": {
+    "name": "ryu111",
+    "email": "ryu111@users.noreply.github.com"
+  },
+  "plugins": [
+    {
+      "name": "claude-workflow",
+      "description": "強制執行 D→R→T 流程的自動化開發工作流",
+      "source": "./",
+      "category": "development"
+    }
+  ]
+}

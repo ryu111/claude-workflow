@@ -28,14 +28,13 @@ cp -r claude-workflow ~/.claude/plugins/
 claude-workflow/
 ├── .claude-plugin/
 │   ├── plugin.json          # Plugin 配置
-│   ├── skills/              # 10 個 Skills
-│   ├── agents/              # 6 個 Agents
-│   ├── hooks/               # 7 個 Hooks
-│   ├── scripts/             # 驗證腳本
-│   └── templates/           # Steering 模板
+│   └── marketplace.json     # Marketplace 配置
+├── agents/                  # 6 個 Agents
 ├── commands/                # 4 個 Commands
-├── CLAUDE.md               # 專案規則
-└── OPTIMIZATION-LOG.md     # 工作記錄
+├── hooks/                   # 7 個 Hooks
+├── scripts/                 # 驗證與初始化腳本
+├── skills/                  # 10 個 Skills
+└── templates/               # Steering 模板
 ```
 
 ## D→R→T 流程
@@ -88,7 +87,7 @@ claude-workflow/
 
 ```bash
 # 執行初始化腳本
-bash .claude-plugin/scripts/init.sh
+bash scripts/init.sh
 ```
 
 或使用命令：

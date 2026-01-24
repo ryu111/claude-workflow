@@ -61,10 +61,21 @@ echo "📋 檢查 Hook 事件..."
 # 支援的事件類型
 SUPPORTED_EVENTS="SessionStart PreToolUse PostToolUse SubagentStop Stop PreCompact SessionEnd Notification UserPromptSubmit"
 
-# 取得 hooks.json 中的所有事件
-EVENTS=$(jq -r 'keys[]' "$HOOKS_JSON")
+# 取得 hooks.json 中的所有事件（支援新結構：.hooks 或舊結構：根層級）
+if jq -e '.hooks' "$HOOKS_JSON" >/dev/null 2>&1; then
+    EVENTS=$(jq -r '.hooks | keys[]' "$HOOKS_JSON")
+    HOOKS_PATH=".hooks"
+else
+    EVENTS=$(jq -r 'keys[]' "$HOOKS_JSON")
+    HOOKS_PATH=""
+fi
 
 for EVENT in $EVENTS; do
+    # 跳過非事件類型的 key（如 description）
+    if [ "$EVENT" = "description" ] || [ "$EVENT" = "version" ]; then
+        continue
+    fi
+
     echo ""
     echo -e "   ${BLUE}▸${NC} 事件: $EVENT"
 
@@ -74,21 +85,36 @@ for EVENT in $EVENTS; do
         WARNINGS=$((WARNINGS + 1))
     fi
 
-    # 取得該事件的 hooks 數量
-    HOOK_COUNT=$(jq -r ".[\"$EVENT\"] | length" "$HOOKS_JSON")
+    # 取得該事件的 hooks 數量（支援新舊結構）
+    if [ -n "$HOOKS_PATH" ]; then
+        HOOK_COUNT=$(jq -r "${HOOKS_PATH}[\"$EVENT\"] | length" "$HOOKS_JSON")
+    else
+        HOOK_COUNT=$(jq -r ".[\"$EVENT\"] | length" "$HOOKS_JSON")
+    fi
 
     for ((i=0; i<HOOK_COUNT; i++)); do
-        MATCHER=$(jq -r ".[\"$EVENT\"][$i].matcher" "$HOOKS_JSON")
-        HOOKS_IN_ENTRY=$(jq -r ".[\"$EVENT\"][$i].hooks | length" "$HOOKS_JSON")
+        if [ -n "$HOOKS_PATH" ]; then
+            MATCHER=$(jq -r "${HOOKS_PATH}[\"$EVENT\"][$i].matcher // \".*\"" "$HOOKS_JSON")
+            HOOKS_IN_ENTRY=$(jq -r "${HOOKS_PATH}[\"$EVENT\"][$i].hooks | length" "$HOOKS_JSON")
+        else
+            MATCHER=$(jq -r ".[\"$EVENT\"][$i].matcher // \".*\"" "$HOOKS_JSON")
+            HOOKS_IN_ENTRY=$(jq -r ".[\"$EVENT\"][$i].hooks | length" "$HOOKS_JSON")
+        fi
 
         echo -e "      Matcher: $MATCHER"
 
         for ((j=0; j<HOOKS_IN_ENTRY; j++)); do
             TOTAL_HOOKS=$((TOTAL_HOOKS + 1))
 
-            HOOK_TYPE=$(jq -r ".[\"$EVENT\"][$i].hooks[$j].type" "$HOOKS_JSON")
-            COMMAND=$(jq -r ".[\"$EVENT\"][$i].hooks[$j].command" "$HOOKS_JSON")
-            TIMEOUT=$(jq -r ".[\"$EVENT\"][$i].hooks[$j].timeout // \"(default)\"" "$HOOKS_JSON")
+            if [ -n "$HOOKS_PATH" ]; then
+                HOOK_TYPE=$(jq -r "${HOOKS_PATH}[\"$EVENT\"][$i].hooks[$j].type" "$HOOKS_JSON")
+                COMMAND=$(jq -r "${HOOKS_PATH}[\"$EVENT\"][$i].hooks[$j].command" "$HOOKS_JSON")
+                TIMEOUT=$(jq -r "${HOOKS_PATH}[\"$EVENT\"][$i].hooks[$j].timeout // \"(default)\"" "$HOOKS_JSON")
+            else
+                HOOK_TYPE=$(jq -r ".[\"$EVENT\"][$i].hooks[$j].type" "$HOOKS_JSON")
+                COMMAND=$(jq -r ".[\"$EVENT\"][$i].hooks[$j].command" "$HOOKS_JSON")
+                TIMEOUT=$(jq -r ".[\"$EVENT\"][$i].hooks[$j].timeout // \"(default)\"" "$HOOKS_JSON")
+            fi
 
             echo -e "      Hook $((j+1)): type=$HOOK_TYPE, timeout=$TIMEOUT"
 

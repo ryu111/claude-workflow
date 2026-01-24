@@ -39,7 +39,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/validate-agents.sh
 
 請按以下步驟執行驗證：
 
-1. **定位 agents 目錄**：查找 `.claude-plugin/agents/` 目錄
+1. **定位 agents 目錄**：查找 `agents/` 目錄
 
 2. **對每個 agent 執行**：
    ```bash
@@ -61,7 +61,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/validate-agents.sh
 
 3. **驗證腳本執行**：
    ```bash
-   .claude-plugin/scripts/validate-agents.sh
+   scripts/validate-agents.sh
    ```
 
 ## 輸出格式
