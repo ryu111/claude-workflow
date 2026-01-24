@@ -1,0 +1,73 @@
+# Checkpoint Template
+# 複製此檔案到 .claude/checkpoint.yaml 使用
+
+version: 1
+task_id: "[uuid]"
+created_at: "YYYY-MM-DDTHH:MM:SSZ"
+updated_at: "YYYY-MM-DDTHH:MM:SSZ"
+
+# 任務狀態
+status: "pending"  # pending | in_progress | paused | completed | failed | blocked
+
+# 任務資訊
+task:
+  name: "[任務名稱]"
+  description: "[任務描述]"
+  spec_file: "openspec/changes/[change-id]/tasks.md"
+
+# 當前進度
+current_step:
+  phase: "[Phase 名稱]"
+  task_id: "[X.X]"
+  index: 0          # 目前第幾個任務
+  total: 0          # 總任務數
+
+# 已完成的步驟
+progress:
+  completed: []
+  # - step: "1.1"
+  #   name: "[任務名稱]"
+  #   result: "success"
+  #   agent: "developer"
+  #   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
+  #   files_modified:
+  #     - "src/xxx.ts"
+
+  pending: []
+  # - step: "1.2"
+  #   name: "[任務名稱]"
+  #   agent: "developer"
+  #   files: ["src/yyy.ts"]
+
+# 執行環境
+context:
+  working_branch: "[branch-name]"
+  base_branch: "main"
+  decisions: []
+  # - question: "[問題]"
+  #   answer: "[答案]"
+  #   reason: "[原因]"
+  #   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
+
+# 錯誤追蹤
+errors:
+  recoverable: []
+  # - step: "[X.X]"
+  #   error_type: "retryable"
+  #   code: "[ERROR_CODE]"
+  #   message: "[錯誤訊息]"
+  #   retry_count: 0
+  #   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
+
+  fatal: []
+  # - step: "[X.X]"
+  #   error_type: "fatal"
+  #   code: "[ERROR_CODE]"
+  #   message: "[錯誤訊息]"
+  #   timestamp: "YYYY-MM-DDTHH:MM:SSZ"
+
+# D→R→T 流程狀態
+drt_state:
+  current_stage: "idle"  # idle | developer | reviewer | tester | debugger
+  stage_result: null     # null | approve | reject | pass | fail
+  retry_count: 0

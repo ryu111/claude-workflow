@@ -1,0 +1,9 @@
+{
+  "name": "claude-workflow",
+  "version": "0.1.0",
+  "description": "自動化商業工作流系統 - D→R→T 流程",
+  "skills": "skills/",
+  "agents": "agents/",
+  "hooks": "hooks/hooks.json",
+  "commands": "../commands/"
+}

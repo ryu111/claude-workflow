@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Claude 狀態目錄（運行時生成）
+.claude/
+
+# 編輯器
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# 臨時檔案
+*.tmp
+*.bak
+*.log
+
+# 測試產生的狀態檔案
+.drt-*
+
+# 開發用檔案（非 Plugin 本體）
+CLAUDE.md
+MIGRATION-CHECKLIST.md
+OPTIMIZATION-LOG.md
