@@ -65,6 +65,25 @@ cleanup_stale_processes() {
 cleanup_stale_processes
 
 # ═══════════════════════════════════════════════════════════════
+# LLM Service 自動啟動
+# ═══════════════════════════════════════════════════════════════
+
+# 優先使用 CLAUDE_PLUGIN_ROOT，否則回退到 BASH_SOURCE
+if [ -n "$CLAUDE_PLUGIN_ROOT" ]; then
+    LLM_MANAGER="$CLAUDE_PLUGIN_ROOT/hooks/scripts/llm-service-manager.sh"
+else
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    LLM_MANAGER="$SCRIPT_DIR/llm-service-manager.sh"
+fi
+
+if [ -x "$LLM_MANAGER" ]; then
+    # 執行 LLM Service 管理（輸出到 stderr）
+    "$LLM_MANAGER" status >&2
+else
+    echo "⚠️ LLM Service Manager 未找到: $LLM_MANAGER" >&2
+fi
+
+# ═══════════════════════════════════════════════════════════════
 # 輸出 JSON 格式的 AI context
 # ═══════════════════════════════════════════════════════════════
 
