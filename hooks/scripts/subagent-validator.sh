@@ -105,6 +105,12 @@ if [ -z "$CHANGE_ID" ] && [ -n "$OUTPUT" ]; then
     CHANGE_ID=$(echo "$OUTPUT" | grep -oE '\[([a-zA-Z0-9_-]+)\]' | head -1 | tr -d '[]')
 fi
 
+# 任務 1: 如果無法解析 CHANGE_ID，自動生成唯一 ID
+if [ -z "$CHANGE_ID" ]; then
+    CHANGE_ID="auto-$(date +%s)-$RANDOM"
+    echo "[$(date)] Auto-generated CHANGE_ID: $CHANGE_ID" >> /tmp/claude-workflow-debug.log
+fi
+
 # 決定狀態檔案路徑
 if [ -n "$CHANGE_ID" ]; then
     STATE_FILE="${STATE_DIR}/.drt-state-${CHANGE_ID}"
@@ -115,10 +121,38 @@ fi
 # 初始化結果
 RESULT="unknown"
 
+# 任務 2: 原子寫入輔助函數
+atomic_write_state() {
+    local content="$1"
+    local target_file="$2"
+    local temp_file="${target_file}.tmp.$$"
+
+    # 寫入臨時檔案
+    echo "$content" > "$temp_file"
+
+    # 原子替換（mv 是原子操作）
+    mv "$temp_file" "$target_file"
+
+    # 添加檔案鎖定（如果 flock 可用）
+    if command -v flock &> /dev/null; then
+        flock -x "$target_file" -c "cat $target_file > /dev/null"
+    fi
+}
+
 # 輔助函數：讀取現有失敗次數
 get_fail_count() {
     if [ -f "$STATE_FILE" ]; then
         local count=$(jq -r '.fail_count // 0' "$STATE_FILE" 2>/dev/null)
+        echo "${count:-0}"
+    else
+        echo "0"
+    fi
+}
+
+# 任務 4: 輔助函數：讀取 REJECT 次數
+get_reject_count() {
+    if [ -f "$STATE_FILE" ]; then
+        local count=$(jq -r '.reject_count // 0' "$STATE_FILE" 2>/dev/null)
         echo "${count:-0}"
     else
         echo "0"
@@ -135,21 +169,23 @@ get_risk_level() {
     fi
 }
 
-# 輔助函數：記錄狀態
+# 任務 9: 輔助函數：記錄狀態（包含版本號）
 record_state() {
     local agent=$1
     local result=$2
     local change_id=$3
     local fail_count=${4:-0}
     local risk_level=${5:-"MEDIUM"}
+    local reject_count=${6:-0}
 
-    local json="{\"agent\":\"$agent\",\"result\":\"$result\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
+    local json="{\"version\":\"1.0\",\"agent\":\"$agent\",\"result\":\"$result\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
     if [ -n "$change_id" ]; then
         json="$json,\"change_id\":\"$change_id\""
     fi
-    json="$json,\"fail_count\":$fail_count,\"risk_level\":\"$risk_level\"}"
+    json="$json,\"fail_count\":$fail_count,\"reject_count\":$reject_count,\"risk_level\":\"$risk_level\"}"
 
-    echo "$json" > "$STATE_FILE"
+    # 使用原子寫入
+    atomic_write_state "$json" "$STATE_FILE"
 }
 
 # 根據 Agent 類型驗證輸出並記錄狀態
@@ -167,12 +203,13 @@ case "$AGENT_NAME" in
             RESULT="incomplete"
         fi
 
-        # 保留現有的失敗計數和風險等級
+        # 保留現有的失敗計數、REJECT 計數和風險等級
         CURRENT_FAIL_COUNT=$(get_fail_count)
+        CURRENT_REJECT_COUNT=$(get_reject_count)
         CURRENT_RISK_LEVEL=$(get_risk_level)
 
         # 記錄狀態
-        record_state "developer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
+        record_state "developer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL" "$CURRENT_REJECT_COUNT"
 
         echo ""
         echo "╭─────────────────────────────────────────╮"
@@ -183,6 +220,7 @@ case "$AGENT_NAME" in
     reviewer)
         # 保留現有的失敗計數和風險等級
         CURRENT_FAIL_COUNT=$(get_fail_count)
+        CURRENT_REJECT_COUNT=$(get_reject_count)
         CURRENT_RISK_LEVEL=$(get_risk_level)
 
         # 檢查是否有 Verdict
@@ -193,7 +231,8 @@ case "$AGENT_NAME" in
             # E2E 統計：記錄結果
             record_e2e_result "reviewer" "approve" "$CURRENT_RISK_LEVEL" "$CHANGE_ID"
 
-            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
+            # APPROVE 時重置 reject_count
+            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL" 0
 
             echo ""
             echo "╭─────────────────────────────────────────╮"
@@ -204,21 +243,47 @@ case "$AGENT_NAME" in
             echo "🔄 REVIEWER REQUEST CHANGES"
             RESULT="reject"
 
+            # 任務 4: 增加 REJECT 計數
+            NEW_REJECT_COUNT=$((CURRENT_REJECT_COUNT + 1))
+
+            # 檢查是否達到上限（5次）
+            if [ $NEW_REJECT_COUNT -ge 5 ]; then
+                echo ""
+                echo "╔════════════════════════════════════════════════════════════════╗"
+                echo "║           🚨 達到 REJECT 上限                                   ║"
+                echo "╚════════════════════════════════════════════════════════════════╝"
+                echo ""
+                echo "⚠️ REVIEWER 已 REJECT $NEW_REJECT_COUNT 次，達到上限" >&2
+                echo "🛑 狀態已設定為 'escalated'，需要人工介入" >&2
+                echo "" >&2
+                echo "📋 建議操作：" >&2
+                echo "   1. 重新評估需求和設計" >&2
+                echo "   2. 尋求資深工程師協助" >&2
+                echo "   3. 考慮拆分任務" >&2
+                echo "   4. 清除狀態重新開始: rm $STATE_FILE" >&2
+                echo "" >&2
+
+                RESULT="escalated"
+            fi
+
             # E2E 統計：記錄結果
             record_e2e_result "reviewer" "reject" "$CURRENT_RISK_LEVEL" "$CHANGE_ID"
 
-            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
+            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL" "$NEW_REJECT_COUNT"
 
-            echo ""
-            echo "╭─────────────────────────────────────────╮"
-            echo "│ 📋 下一步: 請委派 DEVELOPER 修復       │"
-            echo "╰─────────────────────────────────────────╯"
+            if [ "$RESULT" != "escalated" ]; then
+                echo ""
+                echo "╭─────────────────────────────────────────╮"
+                echo "│ 📋 下一步: 請委派 DEVELOPER 修復       │"
+                echo "╰─────────────────────────────────────────╯"
+                echo "📊 REJECT 次數: $NEW_REJECT_COUNT / 5"
+            fi
         else
             echo "⚠️ REVIEWER 輸出應包含明確判定"
             echo "   預期關鍵字: APPROVED / REJECT / REQUEST CHANGES"
             RESULT="unclear"
 
-            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
+            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL" "$CURRENT_REJECT_COUNT"
         fi
         ;;
 
@@ -243,44 +308,19 @@ case "$AGENT_NAME" in
             # E2E 統計：記錄結果
             record_e2e_result "tester" "pass" "$CURRENT_RISK_LEVEL" "$CHANGE_ID"
 
-            # HIGH RISK 需要人工確認
-            if [ "$CURRENT_RISK_LEVEL" = "HIGH" ]; then
-                echo ""
-                echo "╔════════════════════════════════════════════════════════════════╗"
-                echo "║           🔴 HIGH RISK - 需要人工確認                          ║"
-                echo "╚════════════════════════════════════════════════════════════════╝"
-                echo ""
-                echo "此變更涉及高風險區域，需要人工最終確認："
-                echo ""
-                echo "📋 確認清單："
-                echo "   □ 安全性影響已評估"
-                echo "   □ 效能影響已評估"
-                echo "   □ 向後相容性已確認"
-                echo "   □ 回滾計劃已準備"
-                echo ""
-                echo "╭─────────────────────────────────────────╮"
-                echo "│ ⏳ 等待人工確認後才能完成任務          │"
-                echo "│                                         │"
-                echo "│ 確認方式：                              │"
-                echo "│   輸入「確認」或「CONFIRM」             │"
-                echo "╰─────────────────────────────────────────╯"
+            # 任務 10: 移除 HIGH RISK 人工確認
+            # 所有風險等級 PASS 後直接完成
+            # 成功後重置失敗計數和 REJECT 計數
+            record_state "tester" "$RESULT" "$CHANGE_ID" 0 "$CURRENT_RISK_LEVEL" 0
 
-                # 記錄狀態為 pending_confirmation
-                record_state "tester" "pending_confirmation" "$CHANGE_ID" 0 "$CURRENT_RISK_LEVEL"
-            else
-                # 非 HIGH RISK：直接完成
-                # 成功後重置失敗計數
-                record_state "tester" "$RESULT" "$CHANGE_ID" 0 "$CURRENT_RISK_LEVEL"
+            echo ""
+            echo "╭─────────────────────────────────────────╮"
+            echo "│ 🎉 任務完成！可以進行下一個任務        │"
+            echo "╰─────────────────────────────────────────╯"
 
-                echo ""
-                echo "╭─────────────────────────────────────────╮"
-                echo "│ 🎉 任務完成！可以進行下一個任務        │"
-                echo "╰─────────────────────────────────────────╯"
-
-                # 清理狀態檔案（任務完成）
-                if [ -n "$CHANGE_ID" ]; then
-                    rm -f "$STATE_FILE" 2>/dev/null
-                fi
+            # 清理狀態檔案（任務完成）
+            if [ -n "$CHANGE_ID" ]; then
+                rm -f "$STATE_FILE" 2>/dev/null
             fi
 
         elif [ "$HAS_FAIL" -gt 0 ]; then
@@ -324,7 +364,9 @@ case "$AGENT_NAME" in
                     ;;
             esac
 
-            record_state "tester" "$RESULT" "$CHANGE_ID" "$NEW_FAIL_COUNT" "$NEW_RISK_LEVEL"
+            # 保留 REJECT 計數
+            CURRENT_REJECT_COUNT=$(get_reject_count)
+            record_state "tester" "$RESULT" "$CHANGE_ID" "$NEW_FAIL_COUNT" "$NEW_RISK_LEVEL" "$CURRENT_REJECT_COUNT"
 
             echo ""
             echo "╭─────────────────────────────────────────╮"
@@ -336,13 +378,15 @@ case "$AGENT_NAME" in
             echo "⚠️ TESTER 輸出應包含 PASS 或 FAIL"
             RESULT="unclear"
 
-            record_state "tester" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
+            CURRENT_REJECT_COUNT=$(get_reject_count)
+            record_state "tester" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL" "$CURRENT_REJECT_COUNT"
         fi
         ;;
 
     debugger)
-        # 保留現有的失敗計數和風險等級
+        # 保留現有的失敗計數、REJECT 計數和風險等級
         CURRENT_FAIL_COUNT=$(get_fail_count)
+        CURRENT_REJECT_COUNT=$(get_reject_count)
         CURRENT_RISK_LEVEL=$(get_risk_level)
 
         # 檢查是否有修復方案
@@ -354,7 +398,7 @@ case "$AGENT_NAME" in
             RESULT="incomplete"
         fi
 
-        record_state "debugger" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
+        record_state "debugger" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL" "$CURRENT_REJECT_COUNT"
 
         echo ""
         echo "╭─────────────────────────────────────────╮"

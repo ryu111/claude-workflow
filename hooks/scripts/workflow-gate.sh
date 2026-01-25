@@ -94,6 +94,10 @@ fi
 
 # 如果啟用 Bypass，記錄並跳過所有檢查
 if [ "$BYPASS_MODE" = true ]; then
+    # 任務 6: Bypass 審計日誌
+    BYPASS_AUDIT_LOG="/tmp/claude-workflow-bypass-audit.log"
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] BYPASS ACTIVATED | Reason: $BYPASS_REASON | User: ${USER:-unknown} | PWD: $PWD" >> "$BYPASS_AUDIT_LOG"
+
     echo "[$(date)] BYPASS MODE ENABLED: $BYPASS_REASON" >> /tmp/claude-workflow-debug.log
     echo "⚡ Bypass 模式已啟用（$BYPASS_REASON）"
     echo "⚠️ D→R→T 流程檢查已跳過"
@@ -185,11 +189,20 @@ detect_risk_level() {
 
 # ═══════════════════════════════════════════════════════════════
 
+# 任務 5: JSON 解析錯誤處理
+# 設定 trap 捕捉 jq 錯誤
+set -e
+trap 'echo "❌ JSON 解析失敗，輸入格式無效" >&2; exit 1' ERR
+
 # 解析 Task 的 subagent_type 和 prompt
-RAW_SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty' | tr '[:upper:]' '[:lower:]')
+RAW_SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // empty' | tr '[:upper:]' '[:lower:]' 2>/dev/null || echo "")
 # 移除 plugin 前綴（如 "claude-workflow:developer" → "developer"）
 SUBAGENT_TYPE=$(echo "$RAW_SUBAGENT_TYPE" | sed 's/.*://')
-PROMPT=$(echo "$INPUT" | jq -r '.tool_input.prompt // empty')
+PROMPT=$(echo "$INPUT" | jq -r '.tool_input.prompt // empty' 2>/dev/null || echo "")
+
+# 重置 trap
+trap - ERR
+set +e
 
 echo "[$(date)] SUBAGENT_TYPE: $SUBAGENT_TYPE (raw: $RAW_SUBAGENT_TYPE)" >> /tmp/claude-workflow-debug.log
 
@@ -211,6 +224,12 @@ if [ -n "$PROMPT" ]; then
     fi
 fi
 
+# 任務 1: 如果無法解析 CHANGE_ID，自動生成唯一 ID
+if [ -z "$CHANGE_ID" ]; then
+    CHANGE_ID="auto-$(date +%s)-$RANDOM"
+    echo "[$(date)] Auto-generated CHANGE_ID: $CHANGE_ID" >> /tmp/claude-workflow-debug.log
+fi
+
 # 決定狀態檔案路徑
 if [ -n "$CHANGE_ID" ]; then
     # 有 Change ID：使用獨立狀態檔案
@@ -220,24 +239,49 @@ else
     STATE_FILE="${STATE_DIR}/.drt-workflow-state"
 fi
 
+# 任務 2: 原子寫入輔助函數
+# 使用 tempfile + mv 確保原子性
+atomic_write_state() {
+    local content="$1"
+    local target_file="$2"
+    local temp_file="${target_file}.tmp.$$"
+
+    # 寫入臨時檔案
+    echo "$content" > "$temp_file"
+
+    # 原子替換（mv 是原子操作）
+    mv "$temp_file" "$target_file"
+
+    # 添加檔案鎖定（如果 flock 可用）
+    if command -v flock &> /dev/null; then
+        flock -x "$target_file" -c "cat $target_file > /dev/null"
+    fi
+}
+
 # 讀取上一個 agent 狀態
 LAST_AGENT=""
 LAST_RESULT=""
 LAST_TIMESTAMP=""
 FAIL_COUNT=0
+REJECT_COUNT=0
 STORED_RISK_LEVEL="MEDIUM"
 STATE_VALID=false
+STATE_EXPIRED=false
 
 if [ -f "$STATE_FILE" ]; then
     LAST_AGENT=$(jq -r '.agent // empty' "$STATE_FILE" 2>/dev/null)
     LAST_RESULT=$(jq -r '.result // empty' "$STATE_FILE" 2>/dev/null)
     LAST_TIMESTAMP=$(jq -r '.timestamp // empty' "$STATE_FILE" 2>/dev/null)
     FAIL_COUNT=$(jq -r '.fail_count // 0' "$STATE_FILE" 2>/dev/null)
+    REJECT_COUNT=$(jq -r '.reject_count // 0' "$STATE_FILE" 2>/dev/null)
     STORED_RISK_LEVEL=$(jq -r '.risk_level // "MEDIUM"' "$STATE_FILE" 2>/dev/null)
 
-    # 確保 FAIL_COUNT 是數字
+    # 確保計數是數字
     if ! [[ "$FAIL_COUNT" =~ ^[0-9]+$ ]]; then
         FAIL_COUNT=0
+    fi
+    if ! [[ "$REJECT_COUNT" =~ ^[0-9]+$ ]]; then
+        REJECT_COUNT=0
     fi
 
     # 檢查狀態是否過期
@@ -249,6 +293,8 @@ if [ -f "$STATE_FILE" ]; then
 
         if [ $AGE -lt $STATE_EXPIRY ]; then
             STATE_VALID=true
+        else
+            STATE_EXPIRED=true
         fi
     fi
 fi
@@ -312,6 +358,31 @@ case "$SUBAGENT_TYPE" in
         ;;
 
     tester)
+        # 任務 4: 檢查 escalated 狀態
+        if [ -f "$STATE_FILE" ]; then
+            CURRENT_RESULT=$(jq -r '.result // empty' "$STATE_FILE" 2>/dev/null)
+            if [ "$CURRENT_RESULT" = "escalated" ]; then
+                record_e2e_violation "tester" "狀態為 escalated，需人工介入" "HIGH" "$CHANGE_ID"
+
+                echo "" >&2
+                echo "╔════════════════════════════════════════════════════════════════╗" >&2
+                echo "║           🚨 狀態已升級 (Escalated)                            ║" >&2
+                echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                echo "" >&2
+                echo "⚠️ 此變更已達到 REJECT 上限（5次），狀態設定為 'escalated'" >&2
+                echo "🚫 阻擋後續操作，需要人工介入" >&2
+                echo "" >&2
+                echo "📋 建議操作：" >&2
+                echo "   1. 重新評估需求和設計" >&2
+                echo "   2. 尋求資深工程師協助" >&2
+                echo "   3. 考慮拆分任務" >&2
+                echo "   4. 清除狀態重新開始: rm $STATE_FILE" >&2
+                echo "" >&2
+                echo "{\"decision\":\"block\",\"reason\":\"狀態為 escalated，REVIEWER REJECT 達 5 次，需人工介入\"}"
+                exit 0
+            fi
+        fi
+
         # TESTER 必須在 REVIEWER APPROVE 後啟動
         # 例外：LOW 風險允許 D→T 快速通道
 
@@ -377,10 +448,60 @@ case "$SUBAGENT_TYPE" in
             exit 0
         fi
 
+        # 任務 3: 狀態過期阻擋（MEDIUM/HIGH 風險）
+        if [ "$STATE_EXPIRED" = true ]; then
+            if [ "$RISK_LEVEL" = "MEDIUM" ] || [ "$RISK_LEVEL" = "HIGH" ]; then
+                record_e2e_violation "tester" "狀態過期 (>30分鐘)，需重新從 DEVELOPER 開始" "$RISK_LEVEL" "$CHANGE_ID"
+
+                echo "" >&2
+                echo "╔════════════════════════════════════════════════════════════════╗" >&2
+                echo "║               ⏰ 狀態已過期                                     ║" >&2
+                echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                echo "" >&2
+                echo "⚠️ 上一次狀態更新超過 30 分鐘" >&2
+                echo "🔴 風險等級: $RISK_LEVEL" >&2
+                echo "🚫 MEDIUM/HIGH 風險任務不允許使用過期狀態" >&2
+                echo "" >&2
+                echo "📋 請重新執行流程:" >&2
+                echo "   DEVELOPER → REVIEWER → TESTER" >&2
+                echo "" >&2
+                echo "💡 或清除狀態檔案: rm $STATE_FILE" >&2
+                echo "{\"decision\":\"block\",\"reason\":\"狀態過期 (>30分鐘)，MEDIUM/HIGH 風險需重新從 DEVELOPER 開始\"}"
+                exit 0
+            fi
+        fi
+
         # 阻擋條件：上一個是 DEVELOPER（跳過審查）且狀態有效
         if [ "$STATE_VALID" = true ] && [ "$LAST_AGENT" = "developer" ]; then
             # LOW 風險例外：允許 D→T 快速通道
             if [ "$RISK_LEVEL" = "LOW" ]; then
+                # 任務 7: LOW 風險敏感內容檢查
+                # 掃描敏感關鍵字
+                if echo "$PROMPT" | grep -qiE "($HIGH_RISK_KEYWORDS)"; then
+                    # 發現敏感內容，升級為 MEDIUM
+                    RISK_LEVEL="MEDIUM"
+                    echo "" >&2
+                    echo "⚠️ 檢測到敏感內容，風險等級升級: LOW → MEDIUM" >&2
+                    echo "🚫 必須經過 REVIEWER 審查" >&2
+                    echo "" >&2
+
+                    record_e2e_violation "tester" "LOW 風險快速通道發現敏感內容，升級為 MEDIUM" "MEDIUM" "$CHANGE_ID"
+
+                    echo "╔════════════════════════════════════════════════════════════════╗" >&2
+                    echo "║                   ❌ 流程違規                                   ║" >&2
+                    echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                    echo "" >&2
+                    echo "🟡 風險等級: MEDIUM（包含敏感內容）" >&2
+                    echo "🚫 不允許跳過 REVIEWER 直接進行測試" >&2
+                    echo "" >&2
+                    echo "📋 正確流程:" >&2
+                    echo "   DEVELOPER → REVIEWER → TESTER" >&2
+                    echo "" >&2
+                    echo "💡 請先委派 REVIEWER 審查程式碼" >&2
+                    echo "{\"decision\":\"block\",\"reason\":\"LOW 風險快速通道發現敏感內容，升級為 MEDIUM\"}"
+                    exit 0
+                fi
+
                 # E2E 統計：記錄合規（LOW 風險快速通道）
                 record_e2e_compliance "tester" "LOW" "$CHANGE_ID"
 

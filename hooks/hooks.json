@@ -71,16 +71,6 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-validator.sh",
-            "timeout": 10
-          }
-        ]
-      },
-      {
         "matcher": "Write|Edit",
         "hooks": [
           {
