@@ -30,5 +30,5 @@ OPTIMIZATION-LOG.md
 # 測試目錄
 tests/
 
-# OpenSpec 工作目錄（運行時生成）
-openspec/
+# OpenSpec 工作目錄（運行時生成，在專案根目錄）
+/openspec/

@@ -64,10 +64,29 @@ openspec/archive/{change-id}/  → 提示已完成
 └── 🔴 HIGH → D → R(opus) → T(完整)
 ```
 
-### 4. 更新進度
+### 4. 同步 TaskList（雙向同步）
+
+**啟動時：tasks.md → TaskList**
+```
+讀取 tasks.md 中所有任務
+├── 對每個 [ ] 任務 → TaskCreate
+├── 對每個 [x] 任務 → TaskCreate + TaskUpdate(completed)
+└── 建立任務依賴關係
+```
+
+**任務完成時：TaskList → tasks.md**
+```
+TaskUpdate(status: completed)
+├── 同步更新 tasks.md（[ ] → [x]）
+├── 更新 Progress 區塊
+└── git commit（如有程式碼變更）
+```
+
+### 5. 更新進度
 
 ```
 更新 tasks.md（標記 [x]）
+更新 TaskList（status: completed）
 git commit（如有程式碼變更）
 顯示下一步提示
 ```
@@ -152,6 +171,84 @@ Task 2.3: 建立 PaymentService → DEVELOPER #3
 "resume add-user-auth"
 ```
 
+## Task 雙向同步機制
+
+### 啟動時同步（tasks.md → TaskList）
+
+當執行 `/resume` 時，**必須**將 tasks.md 同步到 TaskList：
+
+```javascript
+// 1. 讀取 tasks.md
+const tasks = parseTasksMd(tasksContent);
+
+// 2. 對每個任務建立 TaskCreate
+for (const task of tasks) {
+  TaskCreate({
+    subject: `Task ${task.id}: ${task.name}`,
+    description: `Agent: ${task.agent}\nFiles: ${task.files}`,
+    activeForm: `處理 Task ${task.id}`
+  });
+}
+
+// 3. 已完成的任務標記為 completed
+for (const task of tasks.filter(t => t.completed)) {
+  TaskUpdate({ taskId: task.id, status: "completed" });
+}
+```
+
+### 任務完成時同步（TaskList ↔ tasks.md）
+
+當 D→R→T 流程完成時，**雙向更新**：
+
+```javascript
+// 1. 更新 TaskList
+TaskUpdate({
+  taskId: currentTask.id,
+  status: "completed"
+});
+
+// 2. 更新 tasks.md（使用 Edit 工具）
+// 將 "- [ ] 1.1 任務名稱" 改為 "- [x] 1.1 任務名稱"
+
+// 3. 更新 Progress 區塊
+// Completed: N → Completed: N+1
+```
+
+### 同步時機
+
+| 時機 | 方向 | 動作 |
+|------|------|------|
+| `/resume` 啟動 | tasks.md → TaskList | 建立所有任務 |
+| 任務開始 | TaskList | `status: in_progress` |
+| D 完成 | TaskList | `activeForm: "審查中"` |
+| R 完成 | TaskList | `activeForm: "測試中"` |
+| T PASS | 雙向 | `completed` + 勾選 checkbox |
+| T FAIL | TaskList | `activeForm: "除錯中"` |
+
+### 範例
+
+**tasks.md 內容**：
+```markdown
+## Progress
+- Total: 3 tasks
+- Completed: 1
+- Status: IN_PROGRESS
+
+## 1. Setup (sequential)
+- [x] 1.1 初始化專案 | agent: developer | files: package.json
+- [ ] 1.2 建立資料庫 | agent: developer | files: src/db/
+- [ ] 1.3 設定 Auth | agent: developer | files: src/auth/
+```
+
+**對應 TaskList**：
+```
+ID: 1 | Task 1.1: 初始化專案 | ✅ completed
+ID: 2 | Task 1.2: 建立資料庫 | ⏳ pending → 🔄 in_progress
+ID: 3 | Task 1.3: 設定 Auth | ⏳ pending
+```
+
+---
+
 ## 提示
 
 - `/resume` 適合需要人工確認每個任務的情況
@@ -159,3 +256,4 @@ Task 2.3: 建立 PaymentService → DEVELOPER #3
 - 每個任務完成後會自動 git commit
 - 可以隨時中斷，下次用 `/resume` 繼續
 - 所有任務完成後會提示歸檔到 `archive/`
+- **TaskList 與 tasks.md 保持同步**，可從任一處查看進度

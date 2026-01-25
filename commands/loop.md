@@ -195,6 +195,42 @@ AI: 找到 OpenSpec: openspec/changes/add-user-auth/
     已歸檔: openspec/archive/add-user-auth/
 ```
 
+## Task 雙向同步機制
+
+### OpenSpec 模式同步
+
+當使用 OpenSpec 執行時，tasks.md 和 TaskList **自動同步**：
+
+```
+啟動時: tasks.md → TaskList
+├── 讀取 tasks.md 所有任務
+├── 對每個任務呼叫 TaskCreate
+└── 已完成的任務標記 completed
+
+任務完成時: 雙向更新
+├── TaskUpdate(status: completed)
+├── Edit tasks.md（[ ] → [x]）
+└── 更新 Progress 區塊
+```
+
+### TodoList 模式同步
+
+當使用 TodoList 執行時，任務狀態即時更新：
+
+```
+任務開始: TaskUpdate(status: in_progress, activeForm: "開發中")
+D 完成:   TaskUpdate(activeForm: "審查中")
+R 完成:   TaskUpdate(activeForm: "測試中")
+T PASS:   TaskUpdate(status: completed)
+T FAIL:   TaskUpdate(activeForm: "除錯中")
+```
+
+### 進度追蹤
+
+可隨時使用 `TaskList` 查看即時進度，與 tasks.md（OpenSpec 模式）保持同步。
+
+---
+
 ## 與其他指令的關係
 
 | 指令 | 用途 | 與 /loop 的差異 |

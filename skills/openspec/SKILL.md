@@ -113,6 +113,7 @@ openspec/
 ### References
 
 - [tasks-syntax.md](references/tasks-syntax.md) - tasks.md 詳細語法說明
+- [task-sync.md](references/task-sync.md) - tasks.md ↔ TaskList 雙向同步機制
 
 ### Examples
 

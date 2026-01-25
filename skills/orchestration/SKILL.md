@@ -100,6 +100,97 @@ Main 可直接處理以下內容（但仍需 R → T）：
 ## ❌ TESTER FAIL (3/15 tests) → 啟動 DEBUGGER
 ```
 
+## 不確定性處理（互動式澄清）
+
+### 強制原則
+
+當遇到不確定情況時，**必須**使用 `AskUserQuestion` 工具詢問用戶，**不可猜測**。
+
+### 觸發條件
+
+| 情況 | 範例 | 必須詢問 |
+|------|------|:--------:|
+| **需求不明確** | 「加入登入功能」但未說明 OAuth/JWT | ✅ |
+| **技術選擇** | 多個可行方案（Redux vs Context） | ✅ |
+| **風險判定** | 無法確定 LOW/MEDIUM/HIGH | ✅ |
+| **範圍邊界** | 不清楚是否包含某功能 | ✅ |
+| **架構決策** | 微服務 vs 單體 | ✅ |
+| **UI/UX 方向** | 多種設計風格 | ✅ |
+
+### 使用格式
+
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "關於 [主題]，請選擇實作方式",
+    header: "技術選擇",  // 12字以內
+    options: [
+      { label: "方案 A（推薦）", description: "優點：X｜缺點：Y" },
+      { label: "方案 B", description: "優點：X｜缺點：Y" },
+      { label: "方案 C", description: "優點：X｜缺點：Y" }
+    ],
+    multiSelect: false
+  }]
+})
+```
+
+### 範例場景
+
+**場景 1：用戶說「加入用戶認證」**
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "請選擇認證方式",
+    header: "認證方案",
+    options: [
+      { label: "JWT（推薦）", description: "無狀態、適合 API、易於擴展" },
+      { label: "Session", description: "有狀態、傳統方式、需要 Redis" },
+      { label: "OAuth 2.0", description: "第三方登入、複雜度較高" }
+    ]
+  }]
+})
+```
+
+**場景 2：無法判定風險等級**
+```javascript
+AskUserQuestion({
+  questions: [{
+    question: "此變更涉及 [範圍]，請確認風險等級",
+    header: "風險確認",
+    options: [
+      { label: "🟢 LOW", description: "快速通道，無需 REVIEWER" },
+      { label: "🟡 MEDIUM（推薦）", description: "標準 D→R→T 流程" },
+      { label: "🔴 HIGH", description: "強化流程 + 人工確認" }
+    ]
+  }]
+})
+```
+
+### 禁止行為
+
+```
+❌ 遇到不確定時自行假設
+❌ 猜測用戶意圖
+❌ 選擇「最可能」的方案而不詢問
+❌ 在重要決策上使用預設值
+```
+
+### 記錄決策
+
+用戶選擇後，記錄到 `openspec/changes/[id]/notes.md`：
+
+```markdown
+## 💡 設計決策
+
+### 決策 1: 認證方式
+- **背景**: 用戶要求加入認證功能
+- **選項**: JWT / Session / OAuth 2.0
+- **決定**: JWT
+- **原因**: 用戶選擇，適合 API 場景
+```
+
+---
+
 ## 資源
 
 ### References
