@@ -8,6 +8,53 @@
 # DEBUG: 記錄 hook 被呼叫
 echo "[$(date)] subagent-validator.sh called" >> /tmp/claude-workflow-debug.log
 
+# ═══════════════════════════════════════════════════════════════
+# E2E 統計記錄函數
+# ═══════════════════════════════════════════════════════════════
+
+# 取得 E2E 統計檔案路徑
+get_e2e_stats_file() {
+    local session_id="${E2E_SESSION_ID:-}"
+    if [ -n "$session_id" ]; then
+        echo "/tmp/claude-e2e-stats-${session_id}.jsonl"
+    fi
+}
+
+# 記錄 E2E 重試事件
+record_e2e_retry() {
+    local agent="$1"
+    local reason="$2"
+    local retry_count="${3:-1}"
+
+    local stats_file=$(get_e2e_stats_file)
+    [ -z "$stats_file" ] && return  # 非 E2E 模式，跳過
+
+    local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    echo "{\"type\":\"retry\",\"timestamp\":\"$timestamp\",\"agent\":\"$agent\",\"reason\":\"$reason\",\"retry_count\":$retry_count}" >> "$stats_file"
+}
+
+# 記錄 E2E 結果事件
+record_e2e_result() {
+    local agent="$1"
+    local result="$2"
+    local risk_level="${3:-MEDIUM}"
+    local change_id="${4:-}"
+
+    local stats_file=$(get_e2e_stats_file)
+    [ -z "$stats_file" ] && return  # 非 E2E 模式，跳過
+
+    local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    local json="{\"type\":\"result\",\"timestamp\":\"$timestamp\",\"agent\":\"$agent\",\"result\":\"$result\",\"risk_level\":\"$risk_level\""
+
+    if [ -n "$change_id" ]; then
+        json="$json,\"change_id\":\"$change_id\""
+    fi
+
+    json="$json}"
+
+    echo "$json" >> "$stats_file"
+}
+
 # 讀取 stdin 的 JSON 輸入
 INPUT=$(cat)
 echo "[$(date)] Validator INPUT: $INPUT" >> /tmp/claude-workflow-debug.log
@@ -68,17 +115,39 @@ fi
 # 初始化結果
 RESULT="unknown"
 
+# 輔助函數：讀取現有失敗次數
+get_fail_count() {
+    if [ -f "$STATE_FILE" ]; then
+        local count=$(jq -r '.fail_count // 0' "$STATE_FILE" 2>/dev/null)
+        echo "${count:-0}"
+    else
+        echo "0"
+    fi
+}
+
+# 輔助函數：讀取風險等級
+get_risk_level() {
+    if [ -f "$STATE_FILE" ]; then
+        local level=$(jq -r '.risk_level // "MEDIUM"' "$STATE_FILE" 2>/dev/null)
+        echo "${level:-MEDIUM}"
+    else
+        echo "MEDIUM"
+    fi
+}
+
 # 輔助函數：記錄狀態
 record_state() {
     local agent=$1
     local result=$2
     local change_id=$3
+    local fail_count=${4:-0}
+    local risk_level=${5:-"MEDIUM"}
 
     local json="{\"agent\":\"$agent\",\"result\":\"$result\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\""
     if [ -n "$change_id" ]; then
         json="$json,\"change_id\":\"$change_id\""
     fi
-    json="$json}"
+    json="$json,\"fail_count\":$fail_count,\"risk_level\":\"$risk_level\"}"
 
     echo "$json" > "$STATE_FILE"
 }
@@ -98,8 +167,12 @@ case "$AGENT_NAME" in
             RESULT="incomplete"
         fi
 
+        # 保留現有的失敗計數和風險等級
+        CURRENT_FAIL_COUNT=$(get_fail_count)
+        CURRENT_RISK_LEVEL=$(get_risk_level)
+
         # 記錄狀態
-        record_state "developer" "$RESULT" "$CHANGE_ID"
+        record_state "developer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
 
         echo ""
         echo "╭─────────────────────────────────────────╮"
@@ -108,12 +181,19 @@ case "$AGENT_NAME" in
         ;;
 
     reviewer)
+        # 保留現有的失敗計數和風險等級
+        CURRENT_FAIL_COUNT=$(get_fail_count)
+        CURRENT_RISK_LEVEL=$(get_risk_level)
+
         # 檢查是否有 Verdict
         if echo "$OUTPUT" | grep -qi "APPROVED\|APPROVE\|通過\|批准"; then
             echo "✅ REVIEWER APPROVED"
             RESULT="approve"
 
-            record_state "reviewer" "$RESULT" "$CHANGE_ID"
+            # E2E 統計：記錄結果
+            record_e2e_result "reviewer" "approve" "$CURRENT_RISK_LEVEL" "$CHANGE_ID"
+
+            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
 
             echo ""
             echo "╭─────────────────────────────────────────╮"
@@ -124,7 +204,10 @@ case "$AGENT_NAME" in
             echo "🔄 REVIEWER REQUEST CHANGES"
             RESULT="reject"
 
-            record_state "reviewer" "$RESULT" "$CHANGE_ID"
+            # E2E 統計：記錄結果
+            record_e2e_result "reviewer" "reject" "$CURRENT_RISK_LEVEL" "$CHANGE_ID"
+
+            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
 
             echo ""
             echo "╭─────────────────────────────────────────╮"
@@ -135,51 +218,133 @@ case "$AGENT_NAME" in
             echo "   預期關鍵字: APPROVED / REJECT / REQUEST CHANGES"
             RESULT="unclear"
 
-            record_state "reviewer" "$RESULT" "$CHANGE_ID"
+            record_state "reviewer" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
         fi
         ;;
 
     tester)
         # 檢查是否有 PASS/FAIL
-        HAS_PASS=$(echo "$OUTPUT" | grep -ci "PASS\|通過\|成功" || echo 0)
-        HAS_FAIL=$(echo "$OUTPUT" | grep -ci "FAIL\|失敗\|錯誤" || echo 0)
+        HAS_PASS=$(echo "$OUTPUT" | grep -ci "PASS\|通過\|成功" 2>/dev/null | tr -d '\n' || echo 0)
+        HAS_FAIL=$(echo "$OUTPUT" | grep -ci "FAIL\|失敗\|錯誤" 2>/dev/null | tr -d '\n' || echo 0)
+        # 確保是數字
+        HAS_PASS="${HAS_PASS:-0}"
+        HAS_FAIL="${HAS_FAIL:-0}"
+        [[ ! "$HAS_PASS" =~ ^[0-9]+$ ]] && HAS_PASS=0
+        [[ ! "$HAS_FAIL" =~ ^[0-9]+$ ]] && HAS_FAIL=0
+
+        # 獲取當前失敗次數和風險等級
+        CURRENT_FAIL_COUNT=$(get_fail_count)
+        CURRENT_RISK_LEVEL=$(get_risk_level)
 
         if [ "$HAS_PASS" -gt 0 ] && [ "$HAS_FAIL" -eq 0 ]; then
             echo "✅ TESTER PASS - 所有測試通過"
             RESULT="pass"
 
-            record_state "tester" "$RESULT" "$CHANGE_ID"
+            # E2E 統計：記錄結果
+            record_e2e_result "tester" "pass" "$CURRENT_RISK_LEVEL" "$CHANGE_ID"
 
-            echo ""
-            echo "╭─────────────────────────────────────────╮"
-            echo "│ 🎉 任務完成！可以進行下一個任務        │"
-            echo "╰─────────────────────────────────────────╯"
+            # HIGH RISK 需要人工確認
+            if [ "$CURRENT_RISK_LEVEL" = "HIGH" ]; then
+                echo ""
+                echo "╔════════════════════════════════════════════════════════════════╗"
+                echo "║           🔴 HIGH RISK - 需要人工確認                          ║"
+                echo "╚════════════════════════════════════════════════════════════════╝"
+                echo ""
+                echo "此變更涉及高風險區域，需要人工最終確認："
+                echo ""
+                echo "📋 確認清單："
+                echo "   □ 安全性影響已評估"
+                echo "   □ 效能影響已評估"
+                echo "   □ 向後相容性已確認"
+                echo "   □ 回滾計劃已準備"
+                echo ""
+                echo "╭─────────────────────────────────────────╮"
+                echo "│ ⏳ 等待人工確認後才能完成任務          │"
+                echo "│                                         │"
+                echo "│ 確認方式：                              │"
+                echo "│   輸入「確認」或「CONFIRM」             │"
+                echo "╰─────────────────────────────────────────╯"
 
-            # 清理狀態檔案（任務完成）
-            if [ -n "$CHANGE_ID" ]; then
-                rm -f "$STATE_FILE" 2>/dev/null
+                # 記錄狀態為 pending_confirmation
+                record_state "tester" "pending_confirmation" "$CHANGE_ID" 0 "$CURRENT_RISK_LEVEL"
+            else
+                # 非 HIGH RISK：直接完成
+                # 成功後重置失敗計數
+                record_state "tester" "$RESULT" "$CHANGE_ID" 0 "$CURRENT_RISK_LEVEL"
+
+                echo ""
+                echo "╭─────────────────────────────────────────╮"
+                echo "│ 🎉 任務完成！可以進行下一個任務        │"
+                echo "╰─────────────────────────────────────────╯"
+
+                # 清理狀態檔案（任務完成）
+                if [ -n "$CHANGE_ID" ]; then
+                    rm -f "$STATE_FILE" 2>/dev/null
+                fi
             fi
 
         elif [ "$HAS_FAIL" -gt 0 ]; then
             echo "❌ TESTER FAIL - 發現測試失敗"
             RESULT="fail"
 
-            record_state "tester" "$RESULT" "$CHANGE_ID"
+            # 增加失敗計數
+            NEW_FAIL_COUNT=$((CURRENT_FAIL_COUNT + 1))
+
+            # E2E 統計：記錄重試
+            record_e2e_retry "tester" "測試失敗" "$NEW_FAIL_COUNT"
+
+            # 重試機制：根據風險等級決定處理方式
+            # LOW: 1 次後升級為 MEDIUM
+            # MEDIUM: 3 次後等待用戶介入
+            # HIGH: 2 次後暫停 + 通知用戶
+            NEW_RISK_LEVEL="$CURRENT_RISK_LEVEL"
+
+            case "$CURRENT_RISK_LEVEL" in
+                LOW)
+                    if [ $NEW_FAIL_COUNT -ge 1 ]; then
+                        NEW_RISK_LEVEL="MEDIUM"
+                        echo ""
+                        echo "⬆️ 風險等級升級: LOW → MEDIUM（失敗次數: $NEW_FAIL_COUNT）"
+                    fi
+                    ;;
+                MEDIUM)
+                    if [ $NEW_FAIL_COUNT -ge 3 ]; then
+                        echo ""
+                        echo "🛑 已達最大重試次數（3 次），等待用戶介入"
+                        echo "   請手動檢查問題或決定下一步"
+                    fi
+                    ;;
+                HIGH)
+                    if [ $NEW_FAIL_COUNT -ge 2 ]; then
+                        echo ""
+                        echo "🛑 HIGH RISK 任務已失敗 2 次"
+                        echo "   ⚠️ 暫停自動流程，需要人工審查"
+                        echo "   請檢查：安全性影響、回滾計劃、是否需要專家協助"
+                    fi
+                    ;;
+            esac
+
+            record_state "tester" "$RESULT" "$CHANGE_ID" "$NEW_FAIL_COUNT" "$NEW_RISK_LEVEL"
 
             echo ""
             echo "╭─────────────────────────────────────────╮"
             echo "│ 📋 下一步: 請委派 DEBUGGER 分析        │"
             echo "│    或 DEVELOPER 修復                    │"
             echo "╰─────────────────────────────────────────╯"
+            echo "📊 失敗次數: $NEW_FAIL_COUNT | 風險等級: $NEW_RISK_LEVEL"
         else
             echo "⚠️ TESTER 輸出應包含 PASS 或 FAIL"
             RESULT="unclear"
 
-            record_state "tester" "$RESULT" "$CHANGE_ID"
+            record_state "tester" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
         fi
         ;;
 
     debugger)
+        # 保留現有的失敗計數和風險等級
+        CURRENT_FAIL_COUNT=$(get_fail_count)
+        CURRENT_RISK_LEVEL=$(get_risk_level)
+
         # 檢查是否有修復方案
         if echo "$OUTPUT" | grep -qi "修復\|fix\|solution\|建議\|原因"; then
             echo "✅ DEBUGGER 提供修復方案"
@@ -189,7 +354,7 @@ case "$AGENT_NAME" in
             RESULT="incomplete"
         fi
 
-        record_state "debugger" "$RESULT" "$CHANGE_ID"
+        record_state "debugger" "$RESULT" "$CHANGE_ID" "$CURRENT_FAIL_COUNT" "$CURRENT_RISK_LEVEL"
 
         echo ""
         echo "╭─────────────────────────────────────────╮"
@@ -207,7 +372,7 @@ case "$AGENT_NAME" in
             RESULT="incomplete"
         fi
 
-        record_state "architect" "$RESULT" "$CHANGE_ID"
+        record_state "architect" "$RESULT" "$CHANGE_ID" 0 "MEDIUM"
         ;;
 
     designer)
@@ -215,7 +380,7 @@ case "$AGENT_NAME" in
         echo "✅ DESIGNER 完成"
         RESULT="complete"
 
-        record_state "designer" "$RESULT" "$CHANGE_ID"
+        record_state "designer" "$RESULT" "$CHANGE_ID" 0 "MEDIUM"
         ;;
 
     *)
@@ -224,7 +389,7 @@ case "$AGENT_NAME" in
             echo "📋 Agent '$AGENT_NAME' 完成"
             RESULT="complete"
 
-            record_state "$AGENT_NAME" "$RESULT" "$CHANGE_ID"
+            record_state "$AGENT_NAME" "$RESULT" "$CHANGE_ID" 0 "MEDIUM"
         fi
         ;;
 esac
