@@ -1,9 +1,10 @@
 ---
 name: browser-automation
-version: "1.0.0"
 description: |
   瀏覽器自動化工具選擇與使用指南。自動載入於 E2E 測試、UI 驗證、網頁操作相關任務時。
   觸發詞：browser, E2E, UI 測試, 截圖, 網頁操作, 設計驗證, agent-browser, claude-in-chrome
+user-invocable: false
+disable-model-invocation: false
 ---
 
 # 瀏覽器自動化指南
