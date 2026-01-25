@@ -19,6 +19,17 @@
 *.bak
 *.log
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+
 # 測試產生的狀態檔案
 .drt-*
 
@@ -27,8 +38,13 @@ CLAUDE.md
 MIGRATION-CHECKLIST.md
 OPTIMIZATION-LOG.md
 
-# 測試目錄
+# 測試目錄（開發用）
 tests/
+
+# 測試暫存
+tests/e2e/temp/
+tests/results/
+tests/e2e/reports/
 
 # OpenSpec 工作目錄（運行時生成，在專案根目錄）
 /openspec/
