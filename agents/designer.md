@@ -4,7 +4,7 @@ description: |
   使用此 agent 當用戶說「設計」、「design」、「UI」、「UX」、「介面」時。
   負責 UI/UX 設計、設計規格制定、設計稿審查。
 model: sonnet
-skills: drt-rules, ui-design, checkpoint
+skills: drt-rules, ui-design, checkpoint, browser-automation
 tools:
   - Read
   - Glob

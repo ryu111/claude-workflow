@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-workflow",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "自動化 D→R→T (Developer → Reviewer → Tester) 工作流程系統",
   "owner": {
     "name": "ryu111",

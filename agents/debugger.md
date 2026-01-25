@@ -4,7 +4,7 @@ description: |
   使用此 agent 當 TESTER 測試失敗後，或用戶說「debug」、「除錯」、「修復」時。
   負責分析失敗原因並提出修復方案。
 model: sonnet
-skills: drt-rules, debugging, error-handling
+skills: drt-rules, debugging, error-handling, browser-automation
 tools:
   - Read
   - Glob

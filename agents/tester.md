@@ -4,7 +4,7 @@ description: |
   使用此 agent 當 REVIEWER APPROVE 後，或用戶說「測試」、「test」、「驗證」時。
   負責執行測試，決定 PASS 或 FAIL。
 model: haiku
-skills: drt-rules, test, error-handling
+skills: drt-rules, test, error-handling, browser-automation
 tools:
   - Read
   - Glob
