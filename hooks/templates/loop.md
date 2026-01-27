@@ -4,6 +4,23 @@
 
 ---
 
+## 🔄 推薦：使用 ralph-wiggum 持續執行
+
+如果 ralph-wiggum plugin 可用，請使用以下 Skill 啟動持續執行模式：
+
+```python
+Skill(skill='ralph-wiggum:ralph-loop')
+```
+
+這會：
+- 確保任務完成前不會中斷
+- 自動處理多步驟任務
+- 清楚顯示完成狀態
+
+**如果 ralph-wiggum 不可用**，請按照以下步驟手動執行：
+
+---
+
 ## ❌ 嚴格禁止以下操作
 
 **你（Main Agent）絕對禁止：**
