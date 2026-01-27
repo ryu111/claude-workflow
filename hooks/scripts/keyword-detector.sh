@@ -27,8 +27,8 @@ if ! echo "$INPUT" | jq empty 2>/dev/null; then
     exit 1
 fi
 
-# 解析 userPrompt 欄位
-USER_PROMPT=$(echo "$INPUT" | jq -r '.userPrompt // empty' 2>/dev/null)
+# 解析 prompt 欄位（UserPromptSubmit 事件使用 .prompt）
+USER_PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty' 2>/dev/null)
 
 # 記錄解析結果
 echo "[$(date)] USER_PROMPT extracted: ${USER_PROMPT:0:100}..." >> "$DEBUG_LOG"
@@ -37,9 +37,9 @@ echo "[$(date)] USER_PROMPT extracted: ${USER_PROMPT:0:100}..." >> "$DEBUG_LOG"
 # 基本錯誤處理
 # ═══════════════════════════════════════════════════════════════
 
-# 檢查 userPrompt 是否為空
+# 檢查 prompt 是否為空
 if [ -z "$USER_PROMPT" ]; then
-    echo "[$(date)] WARNING: userPrompt is empty" >> "$DEBUG_LOG"
+    echo "[$(date)] WARNING: prompt is empty" >> "$DEBUG_LOG"
     # 空輸入時返回空的 additionalContext
     cat << 'EOF'
 {

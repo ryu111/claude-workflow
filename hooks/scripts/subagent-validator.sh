@@ -74,8 +74,9 @@ if [ "$HOOK_EVENT" = "PostToolUse" ]; then
     OUTPUT=$(echo "$INPUT" | jq -r '.tool_result // empty')
     PROMPT=$(echo "$INPUT" | jq -r '.tool_input.prompt // empty')
 else
-    # SubagentStop: 從 agent_name 或讀取 transcript
-    RAW_AGENT_NAME=$(echo "$INPUT" | jq -r '.agent_name // .subagent_type // empty' | tr '[:upper:]' '[:lower:]')
+    # SubagentStop: 從 agent_type 讀取（優先）或 fallback
+    # 注意：SubagentStop 事件使用 .agent_type，不是 .agent_name
+    RAW_AGENT_NAME=$(echo "$INPUT" | jq -r '.agent_type // .agent_name // .subagent_type // empty' | tr '[:upper:]' '[:lower:]')
     OUTPUT=$(echo "$INPUT" | jq -r '.output // empty')
     PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty')
 fi

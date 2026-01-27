@@ -12,12 +12,13 @@ INPUT=$(cat)
 echo "[$(date)] SubagentStart INPUT: $INPUT" >> /tmp/claude-workflow-debug.log
 
 # 解析 Agent 名稱（格式：claude-workflow:developer）
-RAW_AGENT_NAME=$(echo "$INPUT" | jq -r '.agent_name // empty' | tr '[:upper:]' '[:lower:]')
+# 注意：SubagentStart 事件使用 .agent_type，不是 .agent_name
+RAW_AGENT_NAME=$(echo "$INPUT" | jq -r '.agent_type // empty' | tr '[:upper:]' '[:lower:]')
 # 移除 plugin 前綴
 AGENT_NAME=$(echo "$RAW_AGENT_NAME" | sed 's/.*://')
 
-# 解析任務描述
-DESCRIPTION=$(echo "$INPUT" | jq -r '.description // empty')
+# 解析任務描述（優先使用 agent_description，fallback 到 description）
+DESCRIPTION=$(echo "$INPUT" | jq -r '.agent_description // .description // empty')
 
 echo "[$(date)] AGENT_NAME: $AGENT_NAME, DESCRIPTION: $DESCRIPTION" >> /tmp/claude-workflow-debug.log
 
