@@ -5,8 +5,11 @@
 # 2025 AI Guardrails: Post-hook Validation + State Management
 # 支援: 並行任務隔離（基於 Change ID）
 
+# DEBUG 日誌
+DEBUG_LOG="/tmp/claude-workflow-debug.log"
+
 # DEBUG: 記錄 hook 被呼叫
-echo "[$(date)] subagent-validator.sh called" >> /tmp/claude-workflow-debug.log
+echo "[$(date)] subagent-validator.sh called" >> "$DEBUG_LOG"
 
 # ═══════════════════════════════════════════════════════════════
 # E2E 統計記錄函數
@@ -79,6 +82,16 @@ else
     RAW_AGENT_NAME=$(echo "$INPUT" | jq -r '.agent_type // .agent_name // .subagent_type // empty' | tr '[:upper:]' '[:lower:]')
     OUTPUT=$(echo "$INPUT" | jq -r '.output // empty')
     PROMPT=$(echo "$INPUT" | jq -r '.prompt // empty')
+
+    # 如果無法從事件獲取，從狀態檔案讀取
+    if [ -z "$RAW_AGENT_NAME" ]; then
+        SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+        AGENT_STATE_FILE="/tmp/claude-agent-state-${SESSION_ID}"
+        if [ -f "$AGENT_STATE_FILE" ]; then
+            RAW_AGENT_NAME=$(cat "$AGENT_STATE_FILE" 2>/dev/null)
+            echo "[$(date)] Fallback to state file: $RAW_AGENT_NAME" >> "$DEBUG_LOG"
+        fi
+    fi
 fi
 
 # 移除 plugin 前綴（如 "claude-workflow:developer" → "developer"）

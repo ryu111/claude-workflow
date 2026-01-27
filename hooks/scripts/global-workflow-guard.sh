@@ -84,14 +84,51 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
     COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
     echo "[$(date)] Bash command: $COMMAND" >> "$DEBUG_LOG"
 
+    # ═══════════════════════════════════════════════════════════════
+    # Plugin 腳本白名單（允許 Plugin 內部腳本執行）
+    # ═══════════════════════════════════════════════════════════════
+
+    # 允許來自 Plugin 目錄的腳本（Command 的 allowed-tools 授權）
+    PLUGIN_SCRIPT_PATTERNS=(
+        # ralph-wiggum plugin
+        "\\.claude/plugins/.*/ralph-wiggum.*/setup-ralph-loop\\.sh"
+        # claude-workflow plugin
+        "claude-workflow.*/scripts/init\\.sh"
+        "claude-workflow.*/scripts/validate-.*\\.sh"
+    )
+
+    is_plugin_script() {
+        local cmd="$1"
+        for pattern in "${PLUGIN_SCRIPT_PATTERNS[@]}"; do
+            if echo "$cmd" | grep -qE "$pattern"; then
+                return 0
+            fi
+        done
+        return 1
+    }
+
+    # 檢查是否為 Plugin 腳本
+    if is_plugin_script "$COMMAND"; then
+        echo "[$(date)] Plugin script allowed: $COMMAND" >> "$DEBUG_LOG"
+        exit 0
+    fi
+
+    # ═══════════════════════════════════════════════════════════════
+    # 危險操作符檢查
+    # ═══════════════════════════════════════════════════════════════
+
     # 檢查是否包含寫入運算符（即使命令本身在白名單中）
     DANGEROUS_OPERATORS=">|>>|\\|.*tee|\\\`|\\$\\("
     if echo "$COMMAND" | grep -qE "$DANGEROUS_OPERATORS"; then
         echo "[$(date)] Bash command blocked (contains dangerous operators)" >> "$DEBUG_LOG"
         # 繼續執行阻擋邏輯（不 exit 0）
     else
-        # 白名單：唯讀命令前綴（移除 echo，cat/head/tail 後加空格）
-        READONLY_PATTERNS="^(git (status|log|diff|branch|show|remote)|ls|pwd|cat |head |tail |wc|grep |find |which|npm (test|run test)|npx |yarn test|pytest|python -m pytest)"
+        # ═══════════════════════════════════════════════════════════════
+        # 唯讀命令白名單（擴展版）
+        # ═══════════════════════════════════════════════════════════════
+
+        # 白名單：唯讀命令前綴（包含更多 git 命令、測試與格式化檢查）
+        READONLY_PATTERNS="^(git (status|log|diff|branch|show|remote|rev-parse|ls-files|blame|tag|config --get|rev-list|describe|shortlog)|ls|pwd|cat|head|tail|wc|grep|rg|ag|find|which|file|stat|du|df|date|uname|whoami|hostname|env|printenv|node --version|npm --version|npm list|npm ls|python --version|pip --version|pip list|pip show|go version|cargo --version|rustc --version|jq|yq|npm (test|run test|run lint|run check)|npx |yarn (test|lint)|pytest|python -m pytest|go test|cargo test|make test|prettier --check|eslint --print-config|black --check|ruff check)"
 
         if echo "$COMMAND" | grep -qE "$READONLY_PATTERNS"; then
             echo "[$(date)] Bash command allowed (read-only)" >> "$DEBUG_LOG"
