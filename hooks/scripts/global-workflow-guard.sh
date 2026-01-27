@@ -117,9 +117,14 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
     # 危險操作符檢查
     # ═══════════════════════════════════════════════════════════════
 
+    # 先移除安全的重定向模式，再檢查危險運算符
+    # 安全的重定向：2>/dev/null, 2>&1, >/dev/null, 1>/dev/null
+    COMMAND_SANITIZED=$(echo "$COMMAND" | sed -E 's/[0-9]*>(&[0-9]+|\/dev\/null)//g')
+    echo "[$(date)] Sanitized command: $COMMAND_SANITIZED" >> "$DEBUG_LOG"
+
     # 檢查是否包含寫入運算符（即使命令本身在白名單中）
     DANGEROUS_OPERATORS=">|>>|\\|.*tee|\\\`|\\$\\("
-    if echo "$COMMAND" | grep -qE "$DANGEROUS_OPERATORS"; then
+    if echo "$COMMAND_SANITIZED" | grep -qE "$DANGEROUS_OPERATORS"; then
         echo "[$(date)] Bash command blocked (contains dangerous operators)" >> "$DEBUG_LOG"
         # 繼續執行阻擋邏輯（不 exit 0）
     else
@@ -138,7 +143,60 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
-# 工具白名單（Main Agent 允許使用的工具）
+# 黑名單檢查（刪去法：只有這些需要 D→R→T）
+# ═══════════════════════════════════════════════════════════════
+
+# 程式碼副檔名（需要 D→R→T）
+CODE_EXTENSIONS="ts|js|jsx|tsx|py|sh|go|java|c|cpp|h|hpp|cs|sql|rs|rb|swift|kt|scala|php|lua|pl|r"
+
+# 核心目錄（需要 D→R→T）
+CORE_DIRECTORIES=(
+    "hooks/"            # 整個 hooks 目錄（包含 hooks.json 配置檔案）
+    "agents/"
+    ".claude-plugin/"
+)
+
+# 檢查是否為程式碼檔案
+is_code_file() {
+    local file_path="$1"
+    local ext="${file_path##*.}"
+    echo "$ext" | grep -qiE "^($CODE_EXTENSIONS)$"
+}
+
+# 檢查是否在核心目錄
+is_core_directory() {
+    local file_path="$1"
+    for dir in "${CORE_DIRECTORIES[@]}"; do
+        if [[ "$file_path" == *"$dir"* ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# 判斷是否需要 D→R→T
+needs_drt() {
+    local file_path="$1"
+
+    # 程式碼檔案 → 需要 D→R→T
+    if is_code_file "$file_path"; then
+        echo "[$(date)] Blacklist check: code file detected ($file_path)" >> "$DEBUG_LOG"
+        return 0
+    fi
+
+    # 核心目錄 → 需要 D→R→T
+    if is_core_directory "$file_path"; then
+        echo "[$(date)] Blacklist check: core directory detected ($file_path)" >> "$DEBUG_LOG"
+        return 0
+    fi
+
+    # 其他 → Main Agent 可以直接做
+    echo "[$(date)] Blacklist check: allowed (non-code, non-core: $file_path)" >> "$DEBUG_LOG"
+    return 1
+}
+
+# ═══════════════════════════════════════════════════════════════
+# 工具白名單（Main Agent 允許使用的唯讀工具）
 # ═══════════════════════════════════════════════════════════════
 
 # Main Agent 允許的唯讀/協調工具
@@ -199,10 +257,45 @@ if is_tool_allowed "$TOOL_NAME"; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
+# Write/Edit 工具的黑名單檢查
+# ═══════════════════════════════════════════════════════════════
+
+# 對於 Write/Edit 工具，進行黑名單檢查
+if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
+    FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+
+    if [ -n "$FILE_PATH" ]; then
+        # 黑名單檢查：只有程式碼和核心目錄需要 D→R→T
+        if ! needs_drt "$FILE_PATH"; then
+            echo "[$(date)] ✅ Blacklist: Main Agent allowed to modify $FILE_PATH (non-code, non-core)" >> "$DEBUG_LOG"
+            exit 0  # 允許 Main Agent 直接修改
+        else
+            # 需要 D→R→T，繼續執行阻擋邏輯
+            if is_code_file "$FILE_PATH"; then
+                BLOCK_REASON="code file (*.${FILE_PATH##*.})"
+            elif is_core_directory "$FILE_PATH"; then
+                BLOCK_REASON="core directory"
+            else
+                BLOCK_REASON="unknown"
+            fi
+            echo "[$(date)] 🚫 Blacklist: blocked - $BLOCK_REASON: $FILE_PATH" >> "$DEBUG_LOG"
+        fi
+    fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
 # 阻擋 Main Agent 使用禁止的工具
 # ═══════════════════════════════════════════════════════════════
 
 echo "[$(date)] BLOCKED: Main Agent attempting to use '$TOOL_NAME'" >> "$DEBUG_LOG"
+
+# 判斷阻擋原因的詳細資訊
+DETAILED_REASON=""
+if [ -n "${FILE_PATH:-}" ] && [ -n "${BLOCK_REASON:-}" ]; then
+    DETAILED_REASON="檔案 '$FILE_PATH' 是 $BLOCK_REASON"
+else
+    DETAILED_REASON="工具 '$TOOL_NAME' 需要透過 DEVELOPER agent"
+fi
 
 # 輸出阻擋訊息到 stderr（顯示給用戶）
 echo "" >&2
@@ -210,7 +303,7 @@ echo "╔═══════════════════════�
 echo "║             🚫 D→R→T 工作流違規                                ║" >&2
 echo "╚════════════════════════════════════════════════════════════════╝" >&2
 echo "" >&2
-echo "❌ Main Agent 禁止直接使用 '$TOOL_NAME' 工具" >&2
+echo "❌ Main Agent 禁止直接修改：$DETAILED_REASON" >&2
 echo "" >&2
 echo "📋 正確做法：" >&2
 echo "   使用 Task 工具委派給 DEVELOPER agent：" >&2
@@ -224,12 +317,16 @@ echo "💡 為什麼？" >&2
 echo "   D→R→T 工作流確保所有程式碼變更經過：" >&2
 echo "   DEVELOPER → REVIEWER → TESTER" >&2
 echo "" >&2
+echo "📝 黑名單規則：" >&2
+echo "   ✅ 允許修改：文檔(.md)、配置(.json, .yaml)、非核心目錄" >&2
+echo "   🚫 需要 D→R→T：程式碼檔案、hooks/、agents/、.claude-plugin/" >&2
+echo "" >&2
 
 # 輸出 JSON 阻擋決策到 stdout（供 Claude Code 解析）
 cat << EOF
 {
   "decision": "block",
-  "reason": "Main Agent 禁止直接使用 '$TOOL_NAME'，必須透過 Task 工具委派給 DEVELOPER agent。這是 D→R→T 工作流的強制要求。"
+  "reason": "Main Agent 禁止直接使用 '$TOOL_NAME'：$DETAILED_REASON。必須透過 Task 工具委派給 DEVELOPER agent。這是 D→R→T 工作流的強制要求。"
 }
 EOF
 

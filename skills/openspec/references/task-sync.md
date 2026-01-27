@@ -21,7 +21,7 @@ tasks.md 與 TaskList（Claude Code 內建的 todo 系統）之間的雙向同�
 
 ### 1. 啟動時（tasks.md → TaskList）
 
-當執行 `/resume` 或 `/loop` 時：
+當執行「接手」或 `/loop` 時：
 
 ```javascript
 // 1. 讀取 tasks.md

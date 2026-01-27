@@ -52,7 +52,7 @@ openspec/specs/{change-id}/
 ```
 OpenSpec 建立在 specs/ = 待審核狀態
 用戶審核後：
-├── 通過 → /resume {change-id} 開始執行
+├── 通過 → 接手 {change-id} 開始執行
 └── 修改 → 調整 proposal.md 或 tasks.md
 ```
 
@@ -113,7 +113,7 @@ openspec/
 
 | 動作 | 指令 |
 |------|------|
-| 開始執行（單步） | `/resume add-user-auth` |
+| 開始執行（單步） | `接手 add-user-auth` |
 | 持續執行直到完成 | `/loop add-user-auth` |
 | 修改規格 | 直接編輯 `openspec/specs/add-user-auth/` |
 
@@ -122,7 +122,7 @@ openspec/
 | 情況 | 處理 |
 |------|------|
 | change-id 已存在於 `specs/` | 詢問是否覆蓋或使用新名稱 |
-| change-id 已存在於 `changes/` | 提示使用 `/resume` 繼續執行 |
+| change-id 已存在於 `changes/` | 提示使用「接手」繼續執行 |
 | change-id 已存在於 `archive/` | 提示已完成，詢問是否重新規劃 |
 | 無法分析專案結構 | ARCHITECT 詢問用戶提供更多資訊 |
 | 功能描述不清楚 | ARCHITECT 詢問澄清需求 |
@@ -141,6 +141,6 @@ openspec/
 ## 提示
 
 - 規格放在 `specs/` 表示待審核，**不會自動執行**
-- 審核通過後使用 `/resume` 或 `/loop` 開始執行
+- 審核通過後使用「接手」或 `/loop` 開始執行
 - 可以手動移動到 `changes/` 表示審核通過
 - ARCHITECT 會根據專案類型自動選擇適合的任務分解方式

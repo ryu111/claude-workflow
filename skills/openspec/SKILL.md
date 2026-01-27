@@ -2,7 +2,7 @@
 name: openspec
 description: |
   OpenSpec 規格文件格式與工作流狀態管理。自動載入於規格建立、任務追蹤、進度管理時。
-  觸發詞：OpenSpec, 規格, spec, tasks.md, proposal, 接手, resume, 歸檔, archive, 進度, progress, Phase
+  觸發詞：OpenSpec, 規格, spec, tasks.md, proposal, 接手, 歸檔, archive, 進度, progress, Phase
 user-invocable: false
 disable-model-invocation: false
 ---
@@ -21,7 +21,7 @@ specs/          changes/          archive/
 
 | 觸發 | 從 | 到 | 動作 |
 |------|----|----|------|
-| 用戶說「接手」或 `/resume` | specs/ | changes/ | 移動目錄，開始執行 |
+| 用戶說「接手」 | specs/ | changes/ | 移動目錄，開始執行 |
 | 所有任務 [x] 完成 | changes/ | archive/ | 歸檔，生成報告 |
 
 ## 目錄結構
@@ -79,7 +79,7 @@ openspec/
 
 | Status | 意義 | 下一步 |
 |--------|------|--------|
-| `NOT_STARTED` | 尚未開始 | 等待 `/resume` |
+| `NOT_STARTED` | 尚未開始 | 等待「接手」 |
 | `IN_PROGRESS` | 執行中 | 繼續 D→R→T |
 | `COMPLETED` | 全部完成 | 自動歸檔 |
 | `BLOCKED` | 卡住了 | 需要用戶介入 |

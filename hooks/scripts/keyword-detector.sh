@@ -63,7 +63,7 @@ fi
 readonly KEYWORD_MAPPINGS=(
   "1|ARCHITECT|規劃 架構 系統設計"
   "2|DESIGNER|設計 UI UX 界面 介面"
-  "3|RESUME|接手 resume"
+  "3|RESUME|接手"
   "4|LOOP|loop 持續 繼續"
   "5|DEVELOPER|實作 開發 寫程式碼 implement"
   "6|REVIEWER|審查 review 檢查程式碼"
