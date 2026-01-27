@@ -8,6 +8,11 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/plugin-status-display.sh",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "echo 'main' > /tmp/claude-agent-state-${CLAUDE_SESSION_ID:-default}",
+            "timeout": 2
           }
         ]
       }
@@ -33,6 +38,17 @@
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workflow-gate.sh",
             "timeout": 10,
             "statusMessage": "🔄 D→R→T 流程檢查中..."
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Bash|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/global-workflow-guard.sh",
+            "timeout": 5,
+            "statusMessage": "🔒 工作流守衛檢查中..."
           }
         ]
       }
@@ -96,6 +112,11 @@
     "SessionEnd": [
       {
         "hooks": [
+          {
+            "type": "command",
+            "command": "rm -f /tmp/claude-agent-state-${CLAUDE_SESSION_ID:-default}",
+            "timeout": 2
+          },
           {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-cleanup-report.sh",

@@ -445,4 +445,13 @@ if [ -n "$CHANGE_ID" ]; then
     echo "📌 Change: $CHANGE_ID"
 fi
 
+# ═══════════════════════════════════════════════════════════════
+# 重設 Agent 狀態為 main（供 global-workflow-guard.sh 使用）
+# ═══════════════════════════════════════════════════════════════
+
+SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+AGENT_STATE_FILE="/tmp/claude-agent-state-${SESSION_ID}"
+echo "main" > "$AGENT_STATE_FILE"
+echo "[$(date)] Reset agent state to: main" >> /tmp/claude-workflow-debug.log
+
 exit 0
