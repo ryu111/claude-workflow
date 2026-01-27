@@ -38,6 +38,73 @@ if [ -f "$BYPASS_FILE" ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
+# 自動執行模式檢查
+# ═══════════════════════════════════════════════════════════════
+
+AUTO_EXEC_FILE="${STATE_DIR}/.auto-execute-pending"
+if [ -f "$AUTO_EXEC_FILE" ]; then
+    # 讀取自動執行狀態
+    AUTO_EXEC_CHANGE_ID=$(jq -r '.change_id // empty' "$AUTO_EXEC_FILE" 2>/dev/null)
+
+    if [ -n "$AUTO_EXEC_CHANGE_ID" ]; then
+        echo "[$(date)] Auto-execute mode active: $AUTO_EXEC_CHANGE_ID" >> "$DEBUG_LOG"
+
+        # 解析工具名稱（提前解析以供檢查）
+        TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
+
+        # 檢查是否為允許的操作
+        case "$TOOL_NAME" in
+            Read|Glob|Grep|Task)
+                # 允許這些工具
+                echo "[$(date)] Auto-execute: allowing $TOOL_NAME" >> "$DEBUG_LOG"
+                ;;
+            Bash)
+                # 只允許 mv 命令（移動 specs → changes）
+                COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+                if echo "$COMMAND" | grep -qE "^mv.*openspec/specs.*openspec/changes"; then
+                    echo "[$(date)] Auto-execute: allowing mv command" >> "$DEBUG_LOG"
+                    # 移動完成後，清除自動執行狀態（在後面處理）
+                else
+                    # 阻擋其他 Bash 命令
+                    echo "" >&2
+                    echo "╔════════════════════════════════════════════════════════════════╗" >&2
+                    echo "║             🚫 自動執行模式 - 僅允許特定操作                    ║" >&2
+                    echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                    echo "" >&2
+                    echo "📋 當前狀態：規劃已完成，等待自動執行" >&2
+                    echo "🔄 允許的操作：" >&2
+                    echo "   1. mv openspec/specs/$AUTO_EXEC_CHANGE_ID openspec/changes/" >&2
+                    echo "   2. Task(developer) 啟動第一個任務" >&2
+                    echo "" >&2
+                    cat << EOF
+{
+  "decision": "block",
+  "reason": "自動執行模式中，僅允許移動規格和啟動 DEVELOPER。請先執行：mv openspec/specs/$AUTO_EXEC_CHANGE_ID openspec/changes/"
+}
+EOF
+                    exit 0
+                fi
+                ;;
+            *)
+                # 阻擋其他工具
+                echo "" >&2
+                echo "╔════════════════════════════════════════════════════════════════╗" >&2
+                echo "║             🚫 自動執行模式 - 請先完成規格移動                  ║" >&2
+                echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                echo "" >&2
+                cat << EOF
+{
+  "decision": "block",
+  "reason": "自動執行模式中。請先：1) mv specs → changes，2) Task(developer) 啟動任務"
+}
+EOF
+                exit 0
+                ;;
+        esac
+    fi
+fi
+
+# ═══════════════════════════════════════════════════════════════
 # 解析工具名稱
 # ═══════════════════════════════════════════════════════════════
 
@@ -263,8 +330,14 @@ fi
 # 對於 Write/Edit 工具，進行黑名單檢查
 if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
     FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+    echo "[$(date)] DEBUG: FILE_PATH=$FILE_PATH" >> "$DEBUG_LOG"
 
-    if [ -n "$FILE_PATH" ]; then
+    # 容錯處理：如果無法解析 FILE_PATH
+    if [ -z "$FILE_PATH" ]; then
+        echo "[$(date)] WARNING: Failed to parse file_path for $TOOL_NAME, using conservative blocking" >> "$DEBUG_LOG"
+        BLOCK_REASON="failed to parse file_path (conservative blocking)"
+        # 繼續執行阻擋邏輯（不 exit）
+    else
         # 黑名單檢查：只有程式碼和核心目錄需要 D→R→T
         if ! needs_drt "$FILE_PATH"; then
             echo "[$(date)] ✅ Blacklist: Main Agent allowed to modify $FILE_PATH (non-code, non-core)" >> "$DEBUG_LOG"

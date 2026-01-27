@@ -40,7 +40,7 @@ echo "$AGENT_NAME" > "$AGENT_STATE_FILE"
 echo "[$(date)] Set current agent to: $AGENT_NAME (file: $AGENT_STATE_FILE)" >> "$DEBUG_LOG"
 
 # ═══════════════════════════════════════════════════════════════
-# 使用 JSON additionalContext 注入 Agent 資訊（Claude 可見）
+# 使用 JSON 更新 Status Line 和注入 Agent 資訊
 # ═══════════════════════════════════════════════════════════════
 
 # 建構 additionalContext 訊息
@@ -49,12 +49,28 @@ if [ -n "$DESCRIPTION" ]; then
     CONTEXT_MSG="$CONTEXT_MSG | 任務: $DESCRIPTION"
 fi
 
-# 輸出 JSON（這會注入到 Claude 的上下文）
+# 建構 Status Line 文字（用戶可見）
+case "$AGENT_NAME" in
+    developer) STATUS_ICON="💻"; STATUS_TEXT="DEVELOPER" ;;
+    reviewer)  STATUS_ICON="🔍"; STATUS_TEXT="REVIEWER" ;;
+    tester)    STATUS_ICON="🧪"; STATUS_TEXT="TESTER" ;;
+    debugger)  STATUS_ICON="🐛"; STATUS_TEXT="DEBUGGER" ;;
+    architect) STATUS_ICON="🏗️"; STATUS_TEXT="ARCHITECT" ;;
+    designer)  STATUS_ICON="🎨"; STATUS_TEXT="DESIGNER" ;;
+    *)         STATUS_ICON="🤖"; STATUS_TEXT="$AGENT_NAME" ;;
+esac
+
+STATUS_LINE="$STATUS_ICON $STATUS_TEXT"
+
+# 輸出 JSON（同時更新 Status Line 和 Claude 上下文）
 cat << EOF
 {
   "hookSpecificOutput": {
     "hookEventName": "SubagentStart",
-    "additionalContext": "$CONTEXT_MSG"
+    "additionalContext": "$CONTEXT_MSG",
+    "statusIndicator": {
+      "text": "$STATUS_LINE"
+    }
   }
 }
 EOF
