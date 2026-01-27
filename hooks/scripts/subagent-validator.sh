@@ -479,12 +479,19 @@ case "$AGENT_NAME" in
                 echo "📋 OpenSpec: $SPEC_CHANGE_ID" >&2
                 echo "📄 任務清單: $LATEST_SPEC" >&2
                 echo "" >&2
-                echo "🔄 必須立即執行以下步驟：" >&2
-                echo "   1. 將規格從 specs/ 移動到 changes/" >&2
-                echo "      mv openspec/specs/$SPEC_CHANGE_ID openspec/changes/" >&2
-                echo "   2. 啟動 DEVELOPER 執行第一個任務" >&2
+                echo "🔄 【強制】立即執行自動流程：" >&2
                 echo "" >&2
-                echo "⚠️ 如果用戶說「暫停」或「先讓我看看」，則跳過自動執行" >&2
+                echo "   第 1 步（必須）：移動規格到執行目錄" >&2
+                echo "      bash -c 'mv openspec/specs/$SPEC_CHANGE_ID openspec/changes/'" >&2
+                echo "" >&2
+                echo "   第 2 步（必須）：讀取任務清單" >&2
+                echo "      Read: openspec/changes/$SPEC_CHANGE_ID/tasks.md" >&2
+                echo "" >&2
+                echo "   第 3 步（必須）：委派 DEVELOPER 執行第一個任務" >&2
+                echo "      Task(subagent_type='claude-workflow:developer', prompt='執行任務 1.1')" >&2
+                echo "" >&2
+                echo "⚠️ 僅在用戶明確說「暫停」時才中斷此流程" >&2
+                echo "   其他情況下必須立即開始執行，不得等待用戶指令" >&2
                 echo "" >&2
             fi
         fi
