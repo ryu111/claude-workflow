@@ -32,8 +32,14 @@ fi
 # 設定當前 Agent 狀態檔案（供 global-workflow-guard.sh 使用）
 # ═══════════════════════════════════════════════════════════════
 
-SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+# 從 JSON 輸入讀取 session_id（與 workflow-gate.sh 一致）
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
+    # Fallback to environment variable
+    SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+fi
 AGENT_STATE_FILE="/tmp/claude-agent-state-${SESSION_ID}"
+echo "[$(date)] Using SESSION_ID: $SESSION_ID" >> "$DEBUG_LOG"
 
 # 寫入當前 agent 名稱
 echo "$AGENT_NAME" > "$AGENT_STATE_FILE"

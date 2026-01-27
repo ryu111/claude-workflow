@@ -10,12 +10,17 @@
 
 DEBUG_LOG="/tmp/claude-workflow-debug.log"
 
-# 修正 1: Session ID 隔離
-SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+# 讀取 stdin 的 JSON 輸入（必須先讀取才能解析 session_id）
+INPUT=$(cat)
+
+# 從 JSON 輸入讀取 session_id（與 agent-status-display.sh 一致）
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
+    # Fallback to environment variable
+    SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+fi
 AGENT_STATE_FILE="/tmp/claude-agent-state-${SESSION_ID}"
 
-# 讀取 stdin 的 JSON 輸入
-INPUT=$(cat)
 echo "[$(date)] global-workflow-guard.sh called (session: $SESSION_ID)" >> "$DEBUG_LOG"
 echo "[$(date)] INPUT: $INPUT" >> "$DEBUG_LOG"
 

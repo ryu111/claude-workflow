@@ -1,6 +1,6 @@
 {
   "name": "claude-workflow",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "description": "自動化 D→R→T (Developer → Reviewer → Tester) 工作流程系統",
   "author": {
     "name": "ryu111",

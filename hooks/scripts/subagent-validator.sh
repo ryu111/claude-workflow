@@ -85,11 +85,16 @@ else
 
     # 如果無法從事件獲取，從狀態檔案讀取
     if [ -z "$RAW_AGENT_NAME" ]; then
-        SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+        # 從 JSON 輸入讀取 session_id（與 agent-status-display.sh 一致）
+        SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+        if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
+            # Fallback to environment variable
+            SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+        fi
         AGENT_STATE_FILE="/tmp/claude-agent-state-${SESSION_ID}"
         if [ -f "$AGENT_STATE_FILE" ]; then
             RAW_AGENT_NAME=$(cat "$AGENT_STATE_FILE" 2>/dev/null)
-            echo "[$(date)] Fallback to state file: $RAW_AGENT_NAME" >> "$DEBUG_LOG"
+            echo "[$(date)] Fallback to state file: $RAW_AGENT_NAME (session: $SESSION_ID)" >> "$DEBUG_LOG"
         fi
     fi
 fi
@@ -552,10 +557,15 @@ fi
 # 重設 Agent 狀態為 main（供 global-workflow-guard.sh 使用）
 # ═══════════════════════════════════════════════════════════════
 
-SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+# 從 JSON 輸入讀取 session_id（與 agent-status-display.sh 一致）
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+if [ -z "$SESSION_ID" ] || [ "$SESSION_ID" = "null" ]; then
+    # Fallback to environment variable
+    SESSION_ID="${CLAUDE_SESSION_ID:-default}"
+fi
 AGENT_STATE_FILE="/tmp/claude-agent-state-${SESSION_ID}"
 echo "main" > "$AGENT_STATE_FILE"
-echo "[$(date)] Reset agent state to: main" >> /tmp/claude-workflow-debug.log
+echo "[$(date)] Reset agent state to: main (session: $SESSION_ID)" >> /tmp/claude-workflow-debug.log
 
 # ═══════════════════════════════════════════════════════════════
 # 重置 Status Line 為 MAIN
