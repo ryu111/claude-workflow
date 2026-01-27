@@ -204,8 +204,8 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
         # 唯讀命令白名單（擴展版）
         # ═══════════════════════════════════════════════════════════════
 
-        # 白名單：唯讀命令前綴（包含更多 git 命令、測試與格式化檢查）
-        READONLY_PATTERNS="^(git (status|log|diff|branch|show|remote|rev-parse|ls-files|blame|tag|config --get|rev-list|describe|shortlog)|ls|pwd|cat|head|tail|wc|grep|rg|ag|find|which|file|stat|du|df|date|uname|whoami|hostname|env|printenv|node --version|npm --version|npm list|npm ls|python --version|pip --version|pip list|pip show|go version|cargo --version|rustc --version|jq|yq|npm (test|run test|run lint|run check)|npx |yarn (test|lint)|pytest|python -m pytest|go test|cargo test|make test|prettier --check|eslint --print-config|black --check|ruff check)"
+        # 白名單：唯讀命令前綴（包含所有 git 命令、測試與格式化檢查）
+        READONLY_PATTERNS="^(git |ls|pwd|cat|head|tail|wc|grep|rg|ag|find|which|file|stat|du|df|date|uname|whoami|hostname|env|printenv|node --version|npm --version|npm list|npm ls|python --version|pip --version|pip list|pip show|go version|cargo --version|rustc --version|jq|yq|npm (test|run test|run lint|run check)|npx |yarn (test|lint)|pytest|python -m pytest|go test|cargo test|make test|prettier --check|eslint --print-config|black --check|ruff check)"
 
         if echo "$COMMAND" | grep -qE "$READONLY_PATTERNS"; then
             echo "[$(date)] Bash command allowed (read-only)" >> "$DEBUG_LOG"
