@@ -66,6 +66,10 @@ echo "[$(date)] Validator INPUT: $INPUT" >> /tmp/claude-workflow-debug.log
 STATE_DIR="${PWD}/.claude"
 mkdir -p "$STATE_DIR" 2>/dev/null
 
+# D→R→T 狀態檔案目錄（集中管理）
+STATE_AUTO_DIR="${PWD}/drt-state-auto"
+mkdir -p "$STATE_AUTO_DIR" 2>/dev/null
+
 # 檢測輸入來源（SubagentStop vs PostToolUse）
 HOOK_EVENT=$(echo "$INPUT" | jq -r '.hook_event_name // empty')
 echo "[$(date)] Hook Event: $HOOK_EVENT" >> /tmp/claude-workflow-debug.log
@@ -132,7 +136,17 @@ fi
 
 # 決定狀態檔案路徑
 if [ -n "$CHANGE_ID" ]; then
-    STATE_FILE="${STATE_DIR}/.drt-state-${CHANGE_ID}"
+    # 新位置
+    STATE_FILE="${STATE_AUTO_DIR}/${CHANGE_ID}.json"
+
+    # Fallback: 如果新位置沒有，檢查舊位置
+    if [ ! -f "$STATE_FILE" ]; then
+        OLD_STATE_FILE="${STATE_DIR}/.drt-state-${CHANGE_ID}"
+        if [ -f "$OLD_STATE_FILE" ]; then
+            STATE_FILE="$OLD_STATE_FILE"
+            echo "[$(date)] Fallback to old state file: $OLD_STATE_FILE" >> "$DEBUG_LOG"
+        fi
+    fi
 else
     STATE_FILE="${STATE_DIR}/.drt-workflow-state"
 fi

@@ -73,6 +73,10 @@ echo "[$(date)] INPUT: $INPUT" >> /tmp/claude-workflow-debug.log
 STATE_DIR="${PWD}/.claude"
 mkdir -p "$STATE_DIR" 2>/dev/null
 
+# D→R→T 狀態檔案目錄（集中管理）
+STATE_AUTO_DIR="${PWD}/drt-state-auto"
+mkdir -p "$STATE_AUTO_DIR" 2>/dev/null
+
 # Bypass 配置文件
 BYPASS_FILE="${STATE_DIR}/.drt-bypass"
 
@@ -232,8 +236,8 @@ fi
 
 # 決定狀態檔案路徑
 if [ -n "$CHANGE_ID" ]; then
-    # 有 Change ID：使用獨立狀態檔案
-    STATE_FILE="${STATE_DIR}/.drt-state-${CHANGE_ID}"
+    # 有 Change ID：使用獨立狀態檔案（新位置）
+    STATE_FILE="${STATE_AUTO_DIR}/${CHANGE_ID}.json"
 else
     # 無 Change ID：使用全域狀態檔案
     STATE_FILE="${STATE_DIR}/.drt-workflow-state"
