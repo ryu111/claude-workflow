@@ -1,0 +1,282 @@
+# E2E-013: Loop + 並行/串行混合
+# 測試 Loop 模式下對 parallel/sequential Phase 的處理
+
+id: E2E-013
+name: "Loop + 並行/串行混合"
+description: "測試 Loop 如何正確處理 tasks.md 中的 (parallel) 和 (sequential) 標記"
+
+# 模擬指令
+command: "接手 parallel-sequential-test loop"
+alternative_commands:
+  - "loop 執行並行串行混合任務"
+  - "持續執行 parallel-sequential-test"
+
+# 測試設定
+settings:
+  max_iterations: 30
+  timeout_minutes: 40
+  bypass_mode: false
+  loop_mode: true
+  parallel_enabled: true
+
+# 預期行為
+expectations:
+  # 任務結構
+  task_structure:
+    phases:
+      - name: "Setup"
+        type: "sequential"
+        tasks:
+          - "初始化專案"
+          - "設定環境"
+
+      - name: "Core Services"
+        type: "parallel"
+        tasks:
+          - "建立 UserService"
+          - "建立 ProductService"
+          - "建立 OrderService"
+
+      - name: "Integration"
+        type: "sequential"
+        depends: "Core Services"
+        tasks:
+          - "整合所有 Service"
+          - "建立 API Routes"
+
+      - name: "Testing"
+        type: "parallel"
+        depends: "Integration"
+        tasks:
+          - "單元測試"
+          - "整合測試"
+          - "E2E 測試"
+
+  # 並行執行
+  parallel_execution:
+    enabled: true
+    requirements:
+      - "偵測到 (parallel) 立即同時啟動所有任務"
+      - "使用單一訊息發送多個 Task 呼叫"
+      - "匯合等待全部完成後再繼續"
+    verification:
+      - "Core Services 的 3 個任務應同時啟動"
+      - "Testing 的 3 個測試應同時執行"
+
+  # 串行執行
+  sequential_execution:
+    requirements:
+      - "(sequential) Phase 按順序執行"
+      - "前一任務完成後才啟動下一個"
+      - "depends 標記正確處理"
+    verification:
+      - "Setup 任務按順序完成"
+      - "Integration 等待 Core Services 完成"
+
+  # Loop 行為
+  loop_behavior:
+    auto_continue: true
+    parallel_detection: true
+    phase_transition: "automatic"
+    expected_behavior:
+      - "自動偵測 Phase 類型（parallel/sequential）"
+      - "並行 Phase 同時啟動多個 Task"
+      - "串行 Phase 依序執行"
+      - "正確處理 Phase 依賴關係"
+
+  # 合規性
+  compliance:
+    min_rate: 90
+    max_violations: 1
+    violations_must_fix: true
+
+  # 最終狀態
+  final_state:
+    all_tasks_completed: true
+    all_phases_completed: true
+    loop_exited_cleanly: true
+    parallel_efficiency_verified: true
+
+# 成功條件
+success_criteria:
+  - "串行 Phase 按順序完成"
+  - "並行 Phase 同時啟動多個 Task"
+  - "Phase 依賴 (depends) 正確等待"
+  - "每個任務完成 D→R→T"
+  - "合規率 >= 90%"
+  - "並行效率提升（相比串行執行）"
+
+# 失敗條件
+failure_criteria:
+  - "並行 Phase 逐一執行（非同時）"
+  - "串行 Phase 順序錯誤"
+  - "忽略 depends 依賴"
+  - "合規率 < 90%"
+  - "並行 Task 間發生競態條件"
+
+# 特殊測試點
+special_tests:
+  - name: "並行啟動驗證"
+    description: "確認並行 Phase 使用單一訊息多個 Task"
+    check: "檢查 Task 呼叫是否在同一回應中"
+    expected: "Core Services 的 3 個任務同時啟動"
+    verification_method: "檢查 Task 工具呼叫的時間戳差異 < 5 秒"
+
+  - name: "匯合等待驗證"
+    description: "確認並行任務全部完成後才進入下一 Phase"
+    scenario: "UserService 完成但 ProductService 未完成時"
+    expected: "等待 ProductService 完成，不進入 Integration"
+    verification_method: "檢查 Integration Phase 啟動時間晚於所有 Core Services 完成時間"
+
+  - name: "依賴處理驗證"
+    description: "確認 depends 標記被正確處理"
+    scenario: "Integration 必須等 Core Services 全部完成"
+    expected: "Core Services 完成後才啟動 Integration"
+    verification_method: "檢查 Phase 執行順序與依賴關係一致"
+
+  - name: "串行順序驗證"
+    description: "確認串行 Phase 嚴格按順序執行"
+    scenario: "Setup Phase 的兩個任務"
+    expected: "初始化專案 → 設定環境（嚴格順序）"
+    verification_method: "檢查任務開始時間，前一任務完成後才啟動下一任務"
+
+  - name: "並行效率驗證"
+    description: "驗證並行執行的時間效益"
+    calculation: "並行執行時間應 < 串行執行時間的 50%"
+    note: "假設 3 個任務各需 5 分鐘，並行應 ~5 分鐘，串行需 15 分鐘"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  # 驗證 E2E-013 測試結果
+
+  SESSION_ID="$1"
+  LOG_FILE=".claude/logs/session-${SESSION_ID}.log"
+  CHANGE_DIR="openspec/changes"
+
+  echo "=== E2E-013 驗證開始 ==="
+
+  # 1. 檢查並行 Phase 偵測
+  echo "檢查並行 Phase 偵測..."
+  PARALLEL_DETECTED=0
+  if grep -qi "parallel\|(parallel)\|並行" "$LOG_FILE"; then
+    PARALLEL_DETECTED=1
+    echo "✅ 偵測到並行 Phase"
+  else
+    echo "❌ 未偵測到並行 Phase"
+    exit 1
+  fi
+
+  # 2. 檢查並行任務同時啟動
+  echo "檢查並行任務同時啟動..."
+  # 檢查 Task 工具呼叫
+  TASK_CALLS=$(grep -c "invoke.*Task\|Task.*呼叫" "$LOG_FILE" 2>/dev/null || echo 0)
+  if [ $TASK_CALLS -ge 3 ]; then
+    echo "✅ 多個 Task 同時呼叫（$TASK_CALLS 次）"
+  else
+    echo "⚠️  Task 呼叫次數較少（$TASK_CALLS）"
+  fi
+
+  # 3. 檢查串行順序執行
+  echo "檢查串行順序執行..."
+  SEQUENTIAL_DETECTED=0
+  if grep -qi "sequential\|(sequential)\|串行\|依序" "$LOG_FILE"; then
+    SEQUENTIAL_DETECTED=1
+    echo "✅ 偵測到串行 Phase"
+  else
+    echo "⚠️  未明確偵測到串行 Phase"
+  fi
+
+  # 4. 檢查 Phase 依賴處理
+  echo "檢查 Phase 依賴處理..."
+  DEPENDS_DETECTED=0
+  if grep -qi "depends\|依賴\|等待.*完成" "$LOG_FILE"; then
+    DEPENDS_DETECTED=1
+    echo "✅ 偵測到依賴處理"
+  else
+    echo "⚠️  未明確偵測到依賴處理"
+  fi
+
+  # 5. 檢查所有 Phase 完成
+  echo "檢查所有 Phase 完成..."
+  PHASES_COMPLETED=0
+  for phase in "Setup" "Core.*Services" "Integration" "Testing"; do
+    if grep -Eqi "$phase.*完成\|完成.*$phase" "$LOG_FILE"; then
+      PHASES_COMPLETED=$((PHASES_COMPLETED + 1))
+    fi
+  done
+
+  if [ $PHASES_COMPLETED -ge 3 ]; then
+    echo "✅ 多數 Phase 已完成（$PHASES_COMPLETED/4）"
+  else
+    echo "❌ Phase 完成不足（$PHASES_COMPLETED/4）"
+    exit 1
+  fi
+
+  # 6. 檢查 D→R→T 流程
+  echo "檢查 D→R→T 流程..."
+  DRT_AGENTS=0
+  for agent in "DEVELOPER\|developer" "REVIEWER\|reviewer" "TESTER\|tester"; do
+    if grep -Eqi "$agent" "$LOG_FILE"; then
+      DRT_AGENTS=$((DRT_AGENTS + 1))
+    fi
+  done
+
+  if [ $DRT_AGENTS -eq 3 ]; then
+    echo "✅ D→R→T 完整流程（3/3 個 Agent）"
+  else
+    echo "⚠️  D→R→T 流程不完整（$DRT_AGENTS/3）"
+  fi
+
+  # 7. 檢查競態條件
+  echo "檢查競態條件..."
+  RACE_CONDITIONS=$(grep -ic "conflict\|競態\|race.*condition" "$LOG_FILE" 2>/dev/null || echo 0)
+  if [ $RACE_CONDITIONS -eq 0 ]; then
+    echo "✅ 無競態條件"
+  else
+    echo "⚠️  偵測到可能的競態條件（$RACE_CONDITIONS 次）"
+  fi
+
+  # 8. 檢查 Loop 連續執行
+  echo "檢查 Loop 連續執行..."
+  USER_PROMPTS=$(grep -c "等待.*輸入\|請.*確認\|是否.*繼續" "$LOG_FILE" 2>/dev/null || echo 0)
+  if [ $USER_PROMPTS -eq 0 ]; then
+    echo "✅ Loop 連續執行無中斷"
+  else
+    echo "❌ Loop 中途詢問用戶（$USER_PROMPTS 次）"
+    exit 1
+  fi
+
+  # 9. 檢查合規率
+  echo "檢查合規率..."
+  SUMMARY=$(source tests/e2e/lib/stats-aggregator.sh && aggregate_stats "$SESSION_ID")
+  RATE=$(echo "$SUMMARY" | grep -o '"compliance_rate":"[^"]*"' | cut -d'"' -f4 | tr -d '%')
+  if [ -n "$RATE" ] && [ "$RATE" -ge 90 ]; then
+    echo "✅ 合規率達標: ${RATE}%"
+  else
+    echo "❌ 合規率不足: ${RATE}%"
+    exit 1
+  fi
+
+  # 10. 檢查最終狀態
+  echo "檢查最終狀態..."
+  STATE_FILE=$(find "$CHANGE_DIR" -name "*parallel-sequential*.state.json" 2>/dev/null | head -1)
+  if [ -f "$STATE_FILE" ]; then
+    STATE=$(jq -r '.state' "$STATE_FILE" 2>/dev/null)
+    if [ "$STATE" = "completed" ]; then
+      echo "✅ 最終狀態: completed"
+    else
+      echo "⚠️  最終狀態: $STATE"
+    fi
+  fi
+
+  # 11. 並行效率報告
+  echo "檢查並行效率..."
+  # 這是啟發式檢查，實際效率需要更詳細的時間戳分析
+  if [ $TASK_CALLS -ge 3 ] && [ $PARALLEL_DETECTED -eq 1 ]; then
+    echo "✅ 並行執行機制已啟用"
+  else
+    echo "⚠️  並行執行效果有限"
+  fi
+
+  echo "=== E2E-013 驗證通過 ==="

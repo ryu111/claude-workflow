@@ -11,7 +11,7 @@
           },
           {
             "type": "command",
-            "command": "echo 'main' > /tmp/claude-agent-state-${CLAUDE_SESSION_ID:-default}",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-state-init.sh",
             "timeout": 2
           }
         ]
@@ -115,7 +115,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "rm -f /tmp/claude-agent-state-${CLAUDE_SESSION_ID:-default}",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-state-cleanup.sh",
             "timeout": 2
           },
           {

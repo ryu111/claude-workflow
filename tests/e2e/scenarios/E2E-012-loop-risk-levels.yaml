@@ -1,0 +1,245 @@
+# E2E-012: Loop + 風險等級混合
+# 測試 Loop 模式下不同風險等級任務的自動處理
+
+id: E2E-012
+name: "Loop + 風險等級混合"
+description: "測試 Loop 模式下如何根據任務風險等級自動選擇流程（LOW → Main→T，MEDIUM → D→R→T，HIGH → D→R(深度)→T）"
+
+# 模擬指令
+command: "接手 mixed-risk-tasks loop"
+alternative_commands:
+  - "持續執行 mixed-risk-tasks"
+  - "loop 完成所有混合風險任務"
+
+# 測試設定
+settings:
+  max_iterations: 20
+  timeout_minutes: 25
+  bypass_mode: false
+  loop_mode: true
+
+# 預期行為
+expectations:
+  # 任務結構（混合風險等級）
+  task_structure:
+    phases:
+      - name: "Documentation"
+        type: "sequential"
+        risk: "LOW"
+        tasks:
+          - "更新 README.md"
+          - "更新 CHANGELOG.md"
+
+      - name: "Feature Development"
+        type: "sequential"
+        risk: "MEDIUM"
+        tasks:
+          - "實作新功能"
+          - "新增單元測試"
+
+      - name: "Security Update"
+        type: "sequential"
+        risk: "HIGH"
+        tasks:
+          - "更新認證邏輯"
+
+  # 風險等級處理
+  risk_handling:
+    low_tasks:
+      flow: "Main → T"
+      skip_reviewer: true
+      description: "文檔變更走快速通道"
+    medium_tasks:
+      flow: "D → R → T"
+      skip_reviewer: false
+      description: "一般功能完整 D→R→T"
+    high_tasks:
+      flow: "D → R(opus) → T"
+      skip_reviewer: false
+      enhanced_review: true
+      description: "核心邏輯強化審查"
+
+  # Loop 行為
+  loop_behavior:
+    auto_continue: true
+    no_user_prompt: true
+    risk_detection: "automatic"
+    expected_behavior:
+      - "自動判定每個任務的風險等級"
+      - "根據風險等級選擇對應流程"
+      - "不同風險等級間無中斷連續執行"
+
+  # 合規性
+  compliance:
+    min_rate: 90
+    max_violations: 1
+    violations_must_fix: true
+
+  # 最終狀態
+  final_state:
+    all_tasks_completed: true
+    loop_exited_cleanly: true
+    risk_detection_accurate: true
+
+# 成功條件
+success_criteria:
+  - "LOW 風險任務走 Main→T 快速通道"
+  - "MEDIUM 風險任務完整 D→R→T"
+  - "HIGH 風險任務有深度審查"
+  - "Loop 自動完成不中斷"
+  - "合規率 >= 90%"
+  - "風險等級自動判定準確"
+
+# 失敗條件
+failure_criteria:
+  - "LOW 風險任務誤走完整 D→R→T"
+  - "HIGH 風險任務缺少深度審查"
+  - "Loop 中途詢問用戶"
+  - "合規率 < 90%"
+  - "風險等級判定錯誤"
+
+# 特殊測試點
+special_tests:
+  - name: "風險等級自動判定"
+    description: "Loop 根據檔案類型自動判定風險"
+    scenario: "*.md 檔案 → LOW，*.ts 檔案 → MEDIUM，/auth/* → HIGH"
+    verification:
+      - "檢查 README.md 變更是否走快速通道"
+      - "檢查 .ts 檔案是否完整 D→R→T"
+      - "檢查 auth 相關檔案是否強化審查"
+
+  - name: "Loop 連續執行"
+    description: "不同風險等級間無中斷"
+    check: "觀察 Loop 是否在任務間詢問用戶"
+    expected: "無詢問，自動連續執行"
+
+  - name: "流程切換驗證"
+    description: "驗證流程根據風險等級正確切換"
+    scenarios:
+      - risk: "LOW"
+        expected_agents: ["main", "tester"]
+        not_expected: ["reviewer"]
+      - risk: "MEDIUM"
+        expected_agents: ["developer", "reviewer", "tester"]
+      - risk: "HIGH"
+        expected_agents: ["developer", "reviewer", "tester"]
+        enhanced_review: true
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  # 驗證 E2E-012 測試結果
+
+  SESSION_ID="$1"
+  LOG_FILE=".claude/logs/session-${SESSION_ID}.log"
+  CHANGE_DIR="openspec/changes"
+
+  echo "=== E2E-012 驗證開始 ==="
+
+  # 1. 檢查風險等級判定
+  echo "檢查風險等級判定..."
+  LOW_DETECTED=0
+  MEDIUM_DETECTED=0
+  HIGH_DETECTED=0
+
+  if grep -qi "LOW.*RISK\|快速通道" "$LOG_FILE"; then
+    LOW_DETECTED=1
+    echo "✅ 偵測到 LOW RISK 任務"
+  fi
+
+  if grep -qi "MEDIUM.*RISK" "$LOG_FILE"; then
+    MEDIUM_DETECTED=1
+    echo "✅ 偵測到 MEDIUM RISK 任務"
+  fi
+
+  if grep -qi "HIGH.*RISK\|深度審查\|強化審查" "$LOG_FILE"; then
+    HIGH_DETECTED=1
+    echo "✅ 偵測到 HIGH RISK 任務"
+  fi
+
+  TOTAL_RISKS=$((LOW_DETECTED + MEDIUM_DETECTED + HIGH_DETECTED))
+  if [ $TOTAL_RISKS -ge 2 ]; then
+    echo "✅ 混合風險等級處理正確（$TOTAL_RISKS/3 種）"
+  else
+    echo "❌ 風險等級覆蓋不足（$TOTAL_RISKS/3）"
+    exit 1
+  fi
+
+  # 2. 檢查 LOW RISK 快速通道
+  echo "檢查 LOW RISK 快速通道..."
+  if grep -q "README\|CHANGELOG" "$LOG_FILE"; then
+    # 確認有文檔變更
+    if grep -A 10 -i "README\|CHANGELOG" "$LOG_FILE" | grep -qi "REVIEWER"; then
+      echo "⚠️  LOW RISK 任務誤走完整 D→R→T"
+    else
+      echo "✅ LOW RISK 任務正確走快速通道"
+    fi
+  fi
+
+  # 3. 檢查 MEDIUM RISK 完整流程
+  echo "檢查 MEDIUM RISK 完整流程..."
+  MEDIUM_AGENTS=0
+  for agent in "DEVELOPER" "REVIEWER" "TESTER"; do
+    if grep -qi "$agent" "$LOG_FILE"; then
+      MEDIUM_AGENTS=$((MEDIUM_AGENTS + 1))
+    fi
+  done
+
+  if [ $MEDIUM_AGENTS -ge 3 ]; then
+    echo "✅ MEDIUM RISK 完整 D→R→T 流程（$MEDIUM_AGENTS/3 個 Agent）"
+  else
+    echo "❌ MEDIUM RISK 流程不完整（$MEDIUM_AGENTS/3）"
+    exit 1
+  fi
+
+  # 4. 檢查 HIGH RISK 強化審查
+  echo "檢查 HIGH RISK 強化審查..."
+  if [ $HIGH_DETECTED -eq 1 ]; then
+    ENHANCED_ITEMS=0
+    for keyword in "安全性" "效能" "相容性"; do
+      if grep -qi "$keyword" "$LOG_FILE"; then
+        ENHANCED_ITEMS=$((ENHANCED_ITEMS + 1))
+      fi
+    done
+
+    if [ $ENHANCED_ITEMS -ge 2 ]; then
+      echo "✅ HIGH RISK 強化審查執行（$ENHANCED_ITEMS/3 項）"
+    else
+      echo "⚠️  HIGH RISK 強化審查不完整（$ENHANCED_ITEMS/3）"
+    fi
+  fi
+
+  # 5. 檢查 Loop 連續執行
+  echo "檢查 Loop 連續執行..."
+  USER_PROMPTS=$(grep -c "等待.*輸入\|請.*確認\|是否.*繼續" "$LOG_FILE" 2>/dev/null || echo 0)
+  if [ $USER_PROMPTS -eq 0 ]; then
+    echo "✅ Loop 連續執行無中斷"
+  else
+    echo "❌ Loop 中途詢問用戶（$USER_PROMPTS 次）"
+    exit 1
+  fi
+
+  # 6. 檢查合規率
+  echo "檢查合規率..."
+  SUMMARY=$(source tests/e2e/lib/stats-aggregator.sh && aggregate_stats "$SESSION_ID")
+  RATE=$(echo "$SUMMARY" | grep -o '"compliance_rate":"[^"]*"' | cut -d'"' -f4 | tr -d '%')
+  if [ -n "$RATE" ] && [ "$RATE" -ge 90 ]; then
+    echo "✅ 合規率達標: ${RATE}%"
+  else
+    echo "❌ 合規率不足: ${RATE}%"
+    exit 1
+  fi
+
+  # 7. 檢查最終狀態
+  echo "檢查最終狀態..."
+  STATE_FILE=$(find "$CHANGE_DIR" -name "*mixed-risk*.state.json" 2>/dev/null | head -1)
+  if [ -f "$STATE_FILE" ]; then
+    STATE=$(jq -r '.state' "$STATE_FILE" 2>/dev/null)
+    if [ "$STATE" = "completed" ]; then
+      echo "✅ 最終狀態: completed"
+    else
+      echo "⚠️  最終狀態: $STATE"
+    fi
+  fi
+
+  echo "=== E2E-012 驗證通過 ==="
