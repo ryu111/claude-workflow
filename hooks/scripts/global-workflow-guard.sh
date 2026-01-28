@@ -78,8 +78,8 @@ if [ -f "$AUTO_EXEC_FILE" ]; then
 
         # 檢查是否為允許的操作
         case "$TOOL_NAME" in
-            Read|Glob|Grep|Task)
-                # 允許這些工具
+            Read|Glob|Grep|Task|WebFetch|WebSearch)
+                # 允許這些工具（唯讀和查詢操作）
                 echo "[$(date)] Auto-execute: allowing $TOOL_NAME" >> "$DEBUG_LOG"
                 ;;
             Bash)
@@ -94,10 +94,20 @@ if [ -f "$AUTO_EXEC_FILE" ]; then
                     echo "[$(date)] Auto-execute: cleared pending state after mv" >> "$DEBUG_LOG"
                     exit 0  # 允許 mv 命令執行
                 else
-                    # Bug Fix 3: 檢查是否為診斷用的唯讀命令
-                    if echo "$COMMAND" | grep -qE '^(ls|find|cat|head|tail|echo|pwd)(\s|$)'; then
+                    # Bug Fix 3: 檢查是否為診斷用的唯讀命令（擴展版）
+                    # Bash 診斷命令白名單：基本、文件檢查、git 唯讀
+                    if echo "$COMMAND" | grep -qE '^(ls|find|cat|head|tail|echo|pwd|wc|grep|diff|file|stat|which|type|env|date|whoami|hostname)(\s|$)'; then
                         echo "[$(date)] Auto-execute: allowing diagnostic read-only command" >> "$DEBUG_LOG"
                         exit 0
+                    fi
+
+                    # git 唯讀命令白名單（排除危險操作）
+                    if echo "$COMMAND" | grep -qE '^git\s+(status|log|diff|branch|show|remote|config)'; then
+                        # 確保不包含危險子命令
+                        if ! echo "$COMMAND" | grep -qE '(push|commit|reset|checkout|merge|rebase|cherry-pick|revert|stash|clean)'; then
+                            echo "[$(date)] Auto-execute: allowing git read-only command" >> "$DEBUG_LOG"
+                            exit 0
+                        fi
                     fi
 
                     # 阻擋其他 Bash 命令
@@ -110,7 +120,11 @@ if [ -f "$AUTO_EXEC_FILE" ]; then
                     echo "🔄 允許的操作：" >&2
                     echo "   1. mv openspec/specs/$AUTO_EXEC_CHANGE_ID openspec/changes/" >&2
                     echo "   2. Task(developer) 啟動第一個任務" >&2
-                    echo "   3. 唯讀診斷命令：ls, find, cat, head, tail, echo, pwd" >&2
+                    echo "   3. 診斷命令（唯讀）：" >&2
+                    echo "      - 基本：ls, find, cat, head, tail, echo, pwd" >&2
+                    echo "      - 檢查：wc, grep, diff, file, stat, which, type" >&2
+                    echo "      - 系統：env, date, whoami, hostname" >&2
+                    echo "      - git：status, log, diff, branch, show, remote, config" >&2
                     echo "" >&2
                     echo "💡 退出自動執行模式：說「解鎖」、「unlock」、「debug」或「診斷」" >&2
                     echo "" >&2
@@ -251,11 +265,23 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
         # ═══════════════════════════════════════════════════════════════
 
         # 白名單：唯讀命令前綴（包含所有 git 命令、測試與格式化檢查）
-        READONLY_PATTERNS="^(git |ls|pwd|cat|head|tail|wc|grep|rg|ag|find|which|file|stat|du|df|date|uname|whoami|hostname|env|printenv|node --version|npm --version|npm list|npm ls|python --version|pip --version|pip list|pip show|go version|cargo --version|rustc --version|jq|yq|npm (test|run test|run lint|run check)|npx |yarn (test|lint)|pytest|python -m pytest|go test|cargo test|make test|prettier --check|eslint --print-config|black --check|ruff check)"
+        # 擴展：新增 git 唯讀命令（status, log, diff, branch, show, remote, config）
+        READONLY_PATTERNS="^(git (status|log|diff|branch|show|remote|config)|ls|pwd|cat|head|tail|wc|grep|rg|ag|find|which|file|stat|du|df|date|uname|whoami|hostname|env|printenv|type|node --version|npm --version|npm list|npm ls|python --version|pip --version|pip list|pip show|go version|cargo --version|rustc --version|jq|yq|npm (test|run test|run lint|run check)|npx |yarn (test|lint)|pytest|python -m pytest|go test|cargo test|make test|prettier --check|eslint --print-config|black --check|ruff check)"
 
         if echo "$COMMAND" | grep -qE "$READONLY_PATTERNS"; then
-            echo "[$(date)] Bash command allowed (read-only)" >> "$DEBUG_LOG"
-            exit 0
+            # 對於 git 命令，額外檢查是否包含危險子命令
+            if echo "$COMMAND" | grep -qE '^git '; then
+                if echo "$COMMAND" | grep -qE '(push|commit|reset|checkout|merge|rebase|cherry-pick|revert|stash|clean)'; then
+                    echo "[$(date)] Bash command blocked (git with dangerous subcommand)" >> "$DEBUG_LOG"
+                    # 繼續執行阻擋邏輯（不 exit）
+                else
+                    echo "[$(date)] Bash command allowed (git read-only)" >> "$DEBUG_LOG"
+                    exit 0
+                fi
+            else
+                echo "[$(date)] Bash command allowed (read-only)" >> "$DEBUG_LOG"
+                exit 0
+            fi
         fi
     fi
 fi
