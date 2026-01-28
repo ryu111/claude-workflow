@@ -452,38 +452,29 @@ case "$AGENT_NAME" in
         record_state "architect" "$RESULT" "$CHANGE_ID" 0 "MEDIUM"
 
         # ═══════════════════════════════════════════════════════════════
-        # ARCHITECT 完成檢測：自動執行觸發
+        # ARCHITECT 完成提示（自動執行模式已移除）
         # ═══════════════════════════════════════════════════════════════
 
         # 檢測是否有新建的 OpenSpec（specs/ 下有 tasks.md）
         SPECS_DIR="${PWD}/openspec/specs"
         if [ -d "$SPECS_DIR" ]; then
-            # Bug Fix 1 & 4: 找到最新的 tasks.md（正確處理空格）
+            # 找到最新的 tasks.md（正確處理空格）
             LATEST_SPEC=$(find "$SPECS_DIR" -name "tasks.md" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1)
             if [ -n "$LATEST_SPEC" ]; then
-                # 提取 change-id（目錄名稱）- 使用變數展開避免 xargs 處理空格問題
+                # 提取 change-id（目錄名稱）
                 SPEC_DIR=$(dirname "$LATEST_SPEC")
                 SPEC_CHANGE_ID=$(basename "$SPEC_DIR")
 
-                # 確保 .drt-state 目錄存在
-                DRT_STATE_DIR="${PWD}/.drt-state"
-                mkdir -p "$DRT_STATE_DIR" 2>/dev/null
+                echo "[$(date)] ARCHITECT completed: $SPEC_CHANGE_ID" >> "$DEBUG_LOG"
 
-                # 設定自動執行狀態（使用 .drt-state 目錄）
-                AUTO_EXEC_FILE="${DRT_STATE_DIR}/.auto-execute-pending"
-                echo "{\"change_id\":\"$SPEC_CHANGE_ID\",\"spec_path\":\"$LATEST_SPEC\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$AUTO_EXEC_FILE"
-
-                echo "[$(date)] Auto-execute pending: $SPEC_CHANGE_ID" >> "$DEBUG_LOG"
-
-                # 輸出強制指示到 stderr（用戶可見）
+                # 輸出提示到 stderr（用戶可見）
                 echo "" >&2
                 echo "## ✅ 🏗️ ARCHITECT 規劃完成" >&2
                 echo "" >&2
-                echo "### 📋 自動執行步驟（必須立即執行）" >&2
+                echo "### 📋 建議下一步" >&2
                 echo "" >&2
                 echo "1. 移動規格到執行目錄" >&2
                 echo "   \`\`\`bash" >&2
-                # Bug Fix 1: mv 命令使用雙引號包裹路徑
                 echo "   mv \"openspec/specs/$SPEC_CHANGE_ID\" \"openspec/changes/\"" >&2
                 echo "   \`\`\`" >&2
                 echo "" >&2
