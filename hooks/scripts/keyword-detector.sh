@@ -242,6 +242,7 @@ if [ "$DETECTED_KEYWORDS" = "LOOP" ]; then
     if [ -z "$CHANGE_ID" ]; then
         CHANGES_DIR="${PWD}/openspec/changes"
         if [ -d "$CHANGES_DIR" ]; then
+            # Bug Fix 1: ls 使用雙引號包裹路徑
             CHANGE_ID=$(ls -t "$CHANGES_DIR" 2>/dev/null | head -1)
         fi
     fi

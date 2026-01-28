@@ -8,14 +8,16 @@ INPUT=$(cat)
 
 # 檢查是否有進行中的 OpenSpec
 if [ -d "./openspec/changes" ]; then
-    ACTIVE_CHANGES=$(find ./openspec/changes -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+    # Bug Fix 1: 使用雙引號包裹路徑並正確處理空格
+    ACTIVE_CHANGES=$(find "./openspec/changes" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | xargs -0 echo)
 
     if [ -n "$ACTIVE_CHANGES" ]; then
         echo "╔════════════════════════════════════════════════════════════════╗"
         echo "║                   📋 進行中的工作                               ║"
         echo "╚════════════════════════════════════════════════════════════════╝"
 
-        for change_dir in $ACTIVE_CHANGES; do
+        # Bug Fix 1: 使用 find -print0 和 while read 處理空格
+        find "./openspec/changes" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | while IFS= read -r -d '' change_dir; do
             change_id=$(basename "$change_dir")
             tasks_file="$change_dir/tasks.md"
 

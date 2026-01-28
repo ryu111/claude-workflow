@@ -48,6 +48,24 @@ fi
 # ═══════════════════════════════════════════════════════════════
 
 AUTO_EXEC_FILE="${STATE_DIR}/.auto-execute-pending"
+
+# ═══════════════════════════════════════════════════════════════
+# Bug Fix 2: 檢查退出關鍵字（從 user_prompt 中偵測）
+# ═══════════════════════════════════════════════════════════════
+# 檢查是否有用戶輸入（user_prompt）包含退出關鍵字
+USER_PROMPT=$(echo "$INPUT" | jq -r '.user_prompt // empty' 2>/dev/null)
+if [ -n "$USER_PROMPT" ]; then
+    # 退出關鍵字清單
+    if echo "$USER_PROMPT" | grep -qiE '(解鎖|unlock|取消自動執行|退出.*workflow|debug|診斷)'; then
+        echo "[$(date)] Auto-execute exit keyword detected: clearing state" >> "$DEBUG_LOG"
+        rm -f "$AUTO_EXEC_FILE" 2>/dev/null
+        echo "" >&2
+        echo "✅ 已退出自動執行模式" >&2
+        echo "" >&2
+        exit 0
+    fi
+fi
+
 if [ -f "$AUTO_EXEC_FILE" ]; then
     # 讀取自動執行狀態
     AUTO_EXEC_CHANGE_ID=$(jq -r '.change_id // empty' "$AUTO_EXEC_FILE" 2>/dev/null)
@@ -76,6 +94,12 @@ if [ -f "$AUTO_EXEC_FILE" ]; then
                     echo "[$(date)] Auto-execute: cleared pending state after mv" >> "$DEBUG_LOG"
                     exit 0  # 允許 mv 命令執行
                 else
+                    # Bug Fix 3: 檢查是否為診斷用的唯讀命令
+                    if echo "$COMMAND" | grep -qE '^(ls|find|cat|head|tail|echo|pwd)(\s|$)'; then
+                        echo "[$(date)] Auto-execute: allowing diagnostic read-only command" >> "$DEBUG_LOG"
+                        exit 0
+                    fi
+
                     # 阻擋其他 Bash 命令
                     echo "" >&2
                     echo "╔════════════════════════════════════════════════════════════════╗" >&2
@@ -86,6 +110,9 @@ if [ -f "$AUTO_EXEC_FILE" ]; then
                     echo "🔄 允許的操作：" >&2
                     echo "   1. mv openspec/specs/$AUTO_EXEC_CHANGE_ID openspec/changes/" >&2
                     echo "   2. Task(developer) 啟動第一個任務" >&2
+                    echo "   3. 唯讀診斷命令：ls, find, cat, head, tail, echo, pwd" >&2
+                    echo "" >&2
+                    echo "💡 退出自動執行模式：說「解鎖」、「unlock」、「debug」或「診斷」" >&2
                     echo "" >&2
                     cat << EOF
 {
@@ -96,12 +123,25 @@ EOF
                     exit 0
                 fi
                 ;;
+            Write)
+                # Bug Fix 3: 允許寫入到 /tmp/ 或用戶桌面（診斷報告）
+                FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+                if [ -n "$FILE_PATH" ]; then
+                    if echo "$FILE_PATH" | grep -qE '^(/tmp/|/private/tmp/|'$HOME'/Desktop/)'; then
+                        echo "[$(date)] Auto-execute: allowing Write to diagnostic location: $FILE_PATH" >> "$DEBUG_LOG"
+                        exit 0
+                    fi
+                fi
+                # 繼續阻擋邏輯
+                ;;
             *)
                 # 阻擋其他工具
                 echo "" >&2
                 echo "╔════════════════════════════════════════════════════════════════╗" >&2
                 echo "║             🚫 自動執行模式 - 請先完成規格移動                  ║" >&2
                 echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                echo "" >&2
+                echo "💡 退出自動執行模式：說「解鎖」、「unlock」、「debug」或「診斷」" >&2
                 echo "" >&2
                 cat << EOF
 {

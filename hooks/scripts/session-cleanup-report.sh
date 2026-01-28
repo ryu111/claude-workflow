@@ -13,12 +13,14 @@ echo ""
 
 # 1. 檢查進行中的工作
 if [ -d "./openspec/changes" ]; then
-    ACTIVE_CHANGES=$(find ./openspec/changes -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    # Bug Fix 1: 使用雙引號包裹路徑
+    ACTIVE_CHANGES=$(find "./openspec/changes" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$ACTIVE_CHANGES" -gt 0 ]; then
         echo "📋 進行中的工作: $ACTIVE_CHANGES 個"
 
-        for change_dir in ./openspec/changes/*/; do
+        # Bug Fix 1: 使用 find -print0 和 while read 處理空格
+        find "./openspec/changes" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | while IFS= read -r -d '' change_dir; do
             if [ -d "$change_dir" ]; then
                 change_id=$(basename "$change_dir")
                 tasks_file="$change_dir/tasks.md"

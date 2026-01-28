@@ -458,11 +458,12 @@ case "$AGENT_NAME" in
         # 檢測是否有新建的 OpenSpec（specs/ 下有 tasks.md）
         SPECS_DIR="${PWD}/openspec/specs"
         if [ -d "$SPECS_DIR" ]; then
-            # 找到最新的 tasks.md
-            LATEST_SPEC=$(find "$SPECS_DIR" -name "tasks.md" -type f 2>/dev/null | head -1)
+            # Bug Fix 1 & 4: 找到最新的 tasks.md（正確處理空格）
+            LATEST_SPEC=$(find "$SPECS_DIR" -name "tasks.md" -type f -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1)
             if [ -n "$LATEST_SPEC" ]; then
-                # 提取 change-id（目錄名稱）
-                SPEC_CHANGE_ID=$(dirname "$LATEST_SPEC" | xargs basename)
+                # 提取 change-id（目錄名稱）- 使用變數展開避免 xargs 處理空格問題
+                SPEC_DIR=$(dirname "$LATEST_SPEC")
+                SPEC_CHANGE_ID=$(basename "$SPEC_DIR")
 
                 # 確保 .drt-state 目錄存在
                 DRT_STATE_DIR="${PWD}/.drt-state"
@@ -482,12 +483,13 @@ case "$AGENT_NAME" in
                 echo "" >&2
                 echo "1. 移動規格到執行目錄" >&2
                 echo "   \`\`\`bash" >&2
-                echo "   mv openspec/specs/$SPEC_CHANGE_ID openspec/changes/" >&2
+                # Bug Fix 1: mv 命令使用雙引號包裹路徑
+                echo "   mv \"openspec/specs/$SPEC_CHANGE_ID\" \"openspec/changes/\"" >&2
                 echo "   \`\`\`" >&2
                 echo "" >&2
                 echo "2. 讀取任務清單並啟動第一個任務" >&2
                 echo "   \`\`\`" >&2
-                echo "   Read: openspec/changes/$SPEC_CHANGE_ID/tasks.md" >&2
+                echo "   Read: \"openspec/changes/$SPEC_CHANGE_ID/tasks.md\"" >&2
                 echo "   Task(subagent_type='claude-workflow:developer', prompt='執行任務 1.1')" >&2
                 echo "   \`\`\`" >&2
                 echo "" >&2

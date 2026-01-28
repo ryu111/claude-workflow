@@ -8,7 +8,8 @@ INPUT=$(cat)
 
 # 檢查是否有完成的 OpenSpec
 if [ -d "./openspec/changes" ]; then
-    for change_dir in ./openspec/changes/*/; do
+    # Bug Fix 1: 使用雙引號包裹路徑並正確處理空格
+    find "./openspec/changes" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | while IFS= read -r -d '' change_dir; do
         if [ -d "$change_dir" ]; then
             change_id=$(basename "$change_dir")
             tasks_file="$change_dir/tasks.md"
@@ -28,7 +29,7 @@ if [ -d "./openspec/changes" ]; then
                         echo "📋 $change_id 的所有任務已完成！"
                         echo ""
                         echo "💡 建議執行歸檔："
-                        echo "   mv ./openspec/changes/$change_id ./openspec/archive/"
+                        echo "   mv \"./openspec/changes/$change_id\" \"./openspec/archive/\""
                         echo "   git add . && git commit -m 'chore: archive $change_id'"
                     fi
                 fi
