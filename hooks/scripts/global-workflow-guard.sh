@@ -130,7 +130,9 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
     echo "[$(date)] Sanitized command: $COMMAND_SANITIZED" >> "$DEBUG_LOG"
 
     # 檢查是否包含寫入運算符（即使命令本身在白名單中）
-    DANGEROUS_OPERATORS=">|>>|\\|.*tee|\\\`|\\$\\("
+    # 使用字元類 [|] 明確匹配管道符，避免轉義混淆
+    # 危險運算符：重定向(>/>>) + 管道([|]) + tee + 反引號 + 命令替換
+    DANGEROUS_OPERATORS=">|>>|[|]|tee|\\\`|\\$\\("
     if echo "$COMMAND_SANITIZED" | grep -qE "$DANGEROUS_OPERATORS"; then
         echo "[$(date)] Bash command blocked (contains dangerous operators)" >> "$DEBUG_LOG"
         # 繼續執行阻擋邏輯（不 exit 0）
@@ -139,24 +141,15 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
         # 唯讀命令白名單（擴展版）
         # ═══════════════════════════════════════════════════════════════
 
-        # 白名單：唯讀命令前綴（包含所有 git 命令、測試與格式化檢查）
-        # 擴展：新增 git 唯讀命令（status, log, diff, branch, show, remote, config）
-        READONLY_PATTERNS="^(git (status|log|diff|branch|show|remote|config)|ls|pwd|cat|head|tail|wc|grep|rg|ag|find|which|file|stat|du|df|date|uname|whoami|hostname|env|printenv|type|node --version|npm --version|npm list|npm ls|python --version|pip --version|pip list|pip show|go version|cargo --version|rustc --version|jq|yq|npm (test|run test|run lint|run check)|npx |yarn (test|lint)|pytest|python -m pytest|go test|cargo test|make test|prettier --check|eslint --print-config|black --check|ruff check)"
+        # 白名單：允許的命令前綴
+        # - git: 所有 git 命令（包含 commit, push, pull, add 等）
+        # - 測試與格式化檢查工具
+        # - 系統資訊查詢命令
+        READONLY_PATTERNS="^(git |ls|pwd|cat|head|tail|wc|grep|rg|ag|find|which|file|stat|du|df|date|uname|whoami|hostname|env|printenv|type|node --version|npm --version|npm list|npm ls|python --version|pip --version|pip list|pip show|go version|cargo --version|rustc --version|jq|yq|npm (test|run test|run lint|run check)|npx |yarn (test|lint)|pytest|python -m pytest|go test|cargo test|make test|prettier --check|eslint --print-config|black --check|ruff check)"
 
         if echo "$COMMAND" | grep -qE "$READONLY_PATTERNS"; then
-            # 對於 git 命令，額外檢查是否包含危險子命令
-            if echo "$COMMAND" | grep -qE '^git '; then
-                if echo "$COMMAND" | grep -qE '(push|commit|reset|checkout|merge|rebase|cherry-pick|revert|stash|clean)'; then
-                    echo "[$(date)] Bash command blocked (git with dangerous subcommand)" >> "$DEBUG_LOG"
-                    # 繼續執行阻擋邏輯（不 exit）
-                else
-                    echo "[$(date)] Bash command allowed (git read-only)" >> "$DEBUG_LOG"
-                    exit 0
-                fi
-            else
-                echo "[$(date)] Bash command allowed (read-only)" >> "$DEBUG_LOG"
-                exit 0
-            fi
+            echo "[$(date)] Bash command allowed (whitelisted command)" >> "$DEBUG_LOG"
+            exit 0
         fi
     fi
 fi
