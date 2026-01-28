@@ -58,33 +58,93 @@ Main 可直接處理以下內容（但仍需 R → T）：
 - 環境變數：`.env`, `.env.*`
 - OpenSpec 規格文件
 
-## 並行執行
+## 並行執行（強制規則）
 
-### 判斷標準
+### ⚠️ 強制並行偵測
 
-| 條件 | 執行方式 |
-|------|----------|
-| 任務間無依賴 | ✅ 並行 |
-| 不同檔案、不同模組 | ✅ 並行 |
-| Task B 需要 Task A 的輸出 | ❌ 串行 |
-| 多個任務修改同一檔案 | ❌ 串行 |
+當 tasks.md 中的 Phase 標記為 `(parallel)` 時，**必須**並行執行該 Phase 的所有任務。
+
+**tasks.md 範例**：
+```
+## 2. Core Services (parallel)
+- [ ] 2.1 建立 UserService | agent: developer | files: src/user.ts
+- [ ] 2.2 建立 ProductService | agent: developer | files: src/product.ts
+- [ ] 2.3 建立 OrderService | agent: developer | files: src/order.ts
+```
+
+**偵測到 `(parallel)` 後的行為**：
+1. 立即分析該 Phase 所有未完成任務
+2. 確認任務間無衝突（不同檔案、無依賴）
+3. **單一訊息中**發送多個 Task 呼叫
+
+### 並行判斷標準
+
+| 條件 | 執行方式 | 說明 |
+|------|----------|------|
+| Phase 標記 `(parallel)` | ✅ **強制並行** | 無視其他條件，直接並行 |
+| 任務間無依賴 | ✅ 建議並行 | 分析 files: 欄位確認 |
+| 不同檔案、不同模組 | ✅ 建議並行 | 無檔案衝突 |
+| Task B 需要 Task A 的輸出 | ❌ 必須串行 | 有資料依賴 |
+| 多個任務修改同一檔案 | ❌ 必須串行 | 檔案衝突 |
 
 ### 並行啟動格式
 
-```markdown
-## ⚡ 並行啟動 3 個 DEVELOPER
-- Task 2.1: 建立 UserService
-- Task 2.2: 建立 AuthService
-- Task 2.3: 建立 PaymentService
+**顯示格式（必須）**：
 ```
+## ⚡ 並行啟動 3 個 DEVELOPER
+
+| Task | 檔案 | 功能 |
+|------|------|------|
+| 2.1 | src/user.ts | 建立 UserService |
+| 2.2 | src/product.ts | 建立 ProductService |
+| 2.3 | src/order.ts | 建立 OrderService |
+```
+
+**技術實作（單一訊息多個 Task）**：
+
+⚠️ **關鍵**：必須在**同一個回應**中發送所有 Task 呼叫，而非分開發送。
+
+範例：同一個 function_calls 區塊中包含多個 Task invoke。
 
 ### 並行錯誤處理
 
-| 情況 | 處理方式 |
-|------|----------|
-| 其中一個 REJECT | 只重試該任務，其他繼續 |
-| 其中一個 FAIL | 只 DEBUG 該任務，其他繼續 |
-| 多個失敗 | 依序處理，避免複雜度爆炸 |
+| 情況 | 處理方式 | 影響其他任務？ |
+|------|----------|:--------------:|
+| 其中一個 REJECT | 只重試該任務 | ❌ 不影響 |
+| 其中一個 FAIL | 只 DEBUG 該任務 | ❌ 不影響 |
+| 多個失敗 | 依序處理 | ❌ 不影響 |
+| 共同依賴失敗 | 全部暫停 | ✅ 全部影響 |
+
+### 並行與 Loop 模式整合
+
+在 Loop 模式下偵測到 `(parallel)` Phase：
+
+1. **自動並行啟動** - 不等待，立即啟動所有任務
+2. **匯合等待** - 等待所有並行任務完成
+3. **統一狀態更新** - 全部完成後一次更新所有 checkbox
+4. **繼續下一 Phase** - 自動進入下一個 Phase
+
+**Loop + 並行執行流程**：
+```
+偵測 (parallel) Phase
+       ↓
+並行啟動 N 個 Task
+       ↓
+等待全部完成 ←── 單一失敗：處理後繼續等待
+       ↓
+更新所有 checkbox [ ] → [x]
+       ↓
+自動進入下一 Phase（不詢問）
+```
+
+### 禁止行為
+
+| 禁止 | 原因 |
+|------|------|
+| ❌ 逐一執行 `(parallel)` 任務 | 浪費時間，違反標記意圖 |
+| ❌ 分開發送 Task 呼叫 | 無法真正並行 |
+| ❌ 等待第一個完成才啟動第二個 | 這是串行，不是並行 |
+| ❌ 忽略 `(parallel)` 標記 | 違反 tasks.md 規範 |
 
 ## 觸發詞識別
 

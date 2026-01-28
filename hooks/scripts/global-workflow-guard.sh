@@ -99,8 +99,6 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
 
     # 允許來自 Plugin 目錄的腳本（Command 的 allowed-tools 授權）
     PLUGIN_SCRIPT_PATTERNS=(
-        # ralph-wiggum plugin
-        "\\.claude/plugins/.*/ralph-wiggum.*/setup-ralph-loop\\.sh"
         # claude-workflow plugin
         "claude-workflow.*/scripts/init\\.sh"
         "claude-workflow.*/scripts/validate-.*\\.sh"
