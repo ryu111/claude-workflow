@@ -224,6 +224,35 @@ ADDITIONAL_CONTEXT=""
 # 記錄檢測結果
 echo "[$(date)] Detected keywords: $DETECTED_KEYWORDS" >> "$DEBUG_LOG"
 
+# ═══════════════════════════════════════════════════════════════
+# Loop 模式啟動檢測
+# ═══════════════════════════════════════════════════════════════
+
+# 檢測是否啟動 Loop 模式
+if [ "$DETECTED_KEYWORDS" = "LOOP" ]; then
+    # 狀態目錄
+    STATE_DIR="${PWD}/.drt-state"
+    mkdir -p "$STATE_DIR" 2>/dev/null
+
+    # 嘗試從 prompt 中提取 change-id
+    CHANGE_ID=""
+    # 方法 1: /loop [change-id] 格式
+    CHANGE_ID=$(echo "$USER_PROMPT" | grep -oE '/loop[[:space:]]+([a-zA-Z0-9_-]+)' | sed 's#/loop[[:space:]]*##' | head -1)
+    # 方法 2: 從 openspec/changes/ 目錄中找最新的
+    if [ -z "$CHANGE_ID" ]; then
+        CHANGES_DIR="${PWD}/openspec/changes"
+        if [ -d "$CHANGES_DIR" ]; then
+            CHANGE_ID=$(ls -t "$CHANGES_DIR" 2>/dev/null | head -1)
+        fi
+    fi
+
+    # 設定 Loop 啟動標記
+    LOOP_ACTIVE_FILE="${STATE_DIR}/.loop-active"
+    echo "{\"start_time\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"change_id\":\"${CHANGE_ID}\"}" > "$LOOP_ACTIVE_FILE"
+
+    echo "[$(date)] Loop mode activated. Change ID: ${CHANGE_ID:-auto-detect}" >> "$DEBUG_LOG"
+fi
+
 # 如果檢測到關鍵字，載入並處理範本
 if [ -n "$DETECTED_KEYWORDS" ]; then
     # 將類型轉換為小寫（範本檔案名稱使用小寫）

@@ -70,7 +70,7 @@ INPUT=$(cat)
 echo "[$(date)] INPUT: $INPUT" >> /tmp/claude-workflow-debug.log
 
 # 狀態目錄
-STATE_DIR="${PWD}/.claude"
+STATE_DIR="${PWD}/.drt-state"
 mkdir -p "$STATE_DIR" 2>/dev/null
 
 # D→R→T 狀態檔案目錄（集中管理）

@@ -68,14 +68,14 @@ if command -v pgrep &> /dev/null; then
 fi
 
 # 4. 清理過期的狀態檔案
-STATE_DIR="${PWD}/.claude"
+STATE_DIR="${PWD}/.drt-state"
 STATE_AUTO_DIR="${PWD}/drt-state-auto"
 TOTAL_CLEANED=0
 
 if command -v find &> /dev/null; then
-    # 清理新目錄（超過 1 天）
-    if [ -d "$STATE_AUTO_DIR" ]; then
-        CLEANED_FILES=$(find "$STATE_AUTO_DIR" -name "*.json" -type f -mtime +1 2>/dev/null)
+    # 清理主狀態目錄（超過 1 天）
+    if [ -d "$STATE_DIR" ]; then
+        CLEANED_FILES=$(find "$STATE_DIR" -name ".drt-state-*" -o -name ".drt-*" -type f -mtime +1 2>/dev/null)
         if [ -n "$CLEANED_FILES" ]; then
             COUNT=$(echo "$CLEANED_FILES" | wc -l | tr -d ' ')
             TOTAL_CLEANED=$((TOTAL_CLEANED + COUNT))
@@ -83,9 +83,20 @@ if command -v find &> /dev/null; then
         fi
     fi
 
-    # 清理舊位置（遷移期間，超過 1 天）
-    if [ -d "$STATE_DIR" ]; then
-        OLD_CLEANED_FILES=$(find "$STATE_DIR" -name ".drt-state-*" -type f -mtime +1 2>/dev/null)
+    # 清理自動狀態目錄（超過 1 天）
+    if [ -d "$STATE_AUTO_DIR" ]; then
+        AUTO_CLEANED_FILES=$(find "$STATE_AUTO_DIR" -name "*.json" -type f -mtime +1 2>/dev/null)
+        if [ -n "$AUTO_CLEANED_FILES" ]; then
+            COUNT=$(echo "$AUTO_CLEANED_FILES" | wc -l | tr -d ' ')
+            TOTAL_CLEANED=$((TOTAL_CLEANED + COUNT))
+            echo "$AUTO_CLEANED_FILES" | xargs rm -f 2>/dev/null
+        fi
+    fi
+
+    # 清理舊位置（遷移期間，超過 1 天）- .claude 目錄
+    OLD_STATE_DIR="${PWD}/.claude"
+    if [ -d "$OLD_STATE_DIR" ]; then
+        OLD_CLEANED_FILES=$(find "$OLD_STATE_DIR" -name ".drt-state-*" -type f -mtime +1 2>/dev/null)
         if [ -n "$OLD_CLEANED_FILES" ]; then
             COUNT=$(echo "$OLD_CLEANED_FILES" | wc -l | tr -d ' ')
             TOTAL_CLEANED=$((TOTAL_CLEANED + COUNT))

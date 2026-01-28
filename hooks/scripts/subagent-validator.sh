@@ -63,7 +63,7 @@ INPUT=$(cat)
 echo "[$(date)] Validator INPUT: $INPUT" >> /tmp/claude-workflow-debug.log
 
 # 狀態目錄
-STATE_DIR="${PWD}/.claude"
+STATE_DIR="${PWD}/.drt-state"
 mkdir -p "$STATE_DIR" 2>/dev/null
 
 # D→R→T 狀態檔案目錄（集中管理）
@@ -464,34 +464,32 @@ case "$AGENT_NAME" in
                 # 提取 change-id（目錄名稱）
                 SPEC_CHANGE_ID=$(dirname "$LATEST_SPEC" | xargs basename)
 
-                # 設定自動執行狀態
-                AUTO_EXEC_FILE="${STATE_DIR}/.auto-execute-pending"
+                # 確保 .drt-state 目錄存在
+                DRT_STATE_DIR="${PWD}/.drt-state"
+                mkdir -p "$DRT_STATE_DIR" 2>/dev/null
+
+                # 設定自動執行狀態（使用 .drt-state 目錄）
+                AUTO_EXEC_FILE="${DRT_STATE_DIR}/.auto-execute-pending"
                 echo "{\"change_id\":\"$SPEC_CHANGE_ID\",\"spec_path\":\"$LATEST_SPEC\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" > "$AUTO_EXEC_FILE"
 
                 echo "[$(date)] Auto-execute pending: $SPEC_CHANGE_ID" >> "$DEBUG_LOG"
 
                 # 輸出強制指示到 stderr（用戶可見）
                 echo "" >&2
-                echo "╔════════════════════════════════════════════════════════════════╗" >&2
-                echo "║             🚀 規劃完成 - 自動執行啟動                          ║" >&2
-                echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                echo "## ✅ 🏗️ ARCHITECT 規劃完成" >&2
                 echo "" >&2
-                echo "📋 OpenSpec: $SPEC_CHANGE_ID" >&2
-                echo "📄 任務清單: $LATEST_SPEC" >&2
+                echo "### 📋 自動執行步驟（必須立即執行）" >&2
                 echo "" >&2
-                echo "🔄 【強制】立即執行自動流程：" >&2
+                echo "1. 移動規格到執行目錄" >&2
+                echo "   \`\`\`bash" >&2
+                echo "   mv openspec/specs/$SPEC_CHANGE_ID openspec/changes/" >&2
+                echo "   \`\`\`" >&2
                 echo "" >&2
-                echo "   第 1 步（必須）：移動規格到執行目錄" >&2
-                echo "      bash -c 'mv openspec/specs/$SPEC_CHANGE_ID openspec/changes/'" >&2
-                echo "" >&2
-                echo "   第 2 步（必須）：讀取任務清單" >&2
-                echo "      Read: openspec/changes/$SPEC_CHANGE_ID/tasks.md" >&2
-                echo "" >&2
-                echo "   第 3 步（必須）：委派 DEVELOPER 執行第一個任務" >&2
-                echo "      Task(subagent_type='claude-workflow:developer', prompt='執行任務 1.1')" >&2
-                echo "" >&2
-                echo "⚠️ 僅在用戶明確說「暫停」時才中斷此流程" >&2
-                echo "   其他情況下必須立即開始執行，不得等待用戶指令" >&2
+                echo "2. 讀取任務清單並啟動第一個任務" >&2
+                echo "   \`\`\`" >&2
+                echo "   Read: openspec/changes/$SPEC_CHANGE_ID/tasks.md" >&2
+                echo "   Task(subagent_type='claude-workflow:developer', prompt='執行任務 1.1')" >&2
+                echo "   \`\`\`" >&2
                 echo "" >&2
             fi
         fi
@@ -546,16 +544,25 @@ if [ -f "$LOOP_ACTIVE_FILE" ]; then
 
                 if [ "$REMAINING" -gt 0 ]; then
                     echo "" >&2
-                    echo "╔════════════════════════════════════════════════════════════════╗" >&2
-                    echo "║             🔄 Loop 模式 - 繼續下一個任務                       ║" >&2
-                    echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                    echo "## 🔄 Loop 模式：自動繼續下一個任務" >&2
+                    echo "" >&2
+                    echo "⚠️ **禁止詢問用戶是否繼續。立即執行下一個任務。**" >&2
                     echo "" >&2
                     echo "📊 剩餘任務：$REMAINING" >&2
-                    echo "📋 任務清單：$TASKS_FILE" >&2
+                    echo "📋 任務清單：\`$TASKS_FILE\`" >&2
                     echo "" >&2
-                    echo "🔄 必須立即：" >&2
-                    echo "   1. 讀取 tasks.md 找到下一個 [ ] 任務" >&2
-                    echo "   2. 啟動對應的 Agent 執行" >&2
+                    echo "### 必須立即執行的步驟：" >&2
+                    echo "" >&2
+                    echo "1. **讀取** \`$TASKS_FILE\`" >&2
+                    echo "2. **找到**第一個 \`- [ ]\` 標記的任務" >&2
+                    echo "3. **解析**任務資訊（agent、files、描述）" >&2
+                    echo "4. **啟動**對應的 Agent（使用 Task 工具）" >&2
+                    echo "" >&2
+                    echo "**範例命令格式：**" >&2
+                    echo "\`\`\`" >&2
+                    echo "Task(subagent_type='claude-workflow:developer'," >&2
+                    echo "     prompt='執行 Task X.X - [任務名稱] [$LOOP_CHANGE_ID]')" >&2
+                    echo "\`\`\`" >&2
                     echo "" >&2
                 else
                     # 所有任務完成

@@ -35,7 +35,8 @@ if [ "$CLAUDE_WORKFLOW_BYPASS" = "true" ] || [ "$CLAUDE_WORKFLOW_BYPASS" = "1" ]
 fi
 
 # 方式 2: 配置文件
-STATE_DIR="${PWD}/.claude"
+STATE_DIR="${PWD}/.drt-state"
+mkdir -p "$STATE_DIR" 2>/dev/null
 BYPASS_FILE="${STATE_DIR}/.drt-bypass"
 if [ -f "$BYPASS_FILE" ]; then
     echo "[$(date)] BYPASS: config file" >> "$DEBUG_LOG"
@@ -68,7 +69,12 @@ if [ -f "$AUTO_EXEC_FILE" ]; then
                 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
                 if echo "$COMMAND" | grep -qE "^mv.*openspec/specs.*openspec/changes"; then
                     echo "[$(date)] Auto-execute: allowing mv command" >> "$DEBUG_LOG"
-                    # 移動完成後，清除自動執行狀態（在後面處理）
+                    # 移動完成後，清除自動執行狀態
+                    # 注意：這是 PreToolUse Hook，我們假設 mv 會成功
+                    # 如果失敗，用戶重新執行時會再次嘗試
+                    rm -f "$AUTO_EXEC_FILE"
+                    echo "[$(date)] Auto-execute: cleared pending state after mv" >> "$DEBUG_LOG"
+                    exit 0  # 允許 mv 命令執行
                 else
                     # 阻擋其他 Bash 命令
                     echo "" >&2
