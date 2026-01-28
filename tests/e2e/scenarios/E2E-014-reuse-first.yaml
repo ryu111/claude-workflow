@@ -1,0 +1,189 @@
+# E2E-014: 複用優先原則驗證
+# 測試 reuse-first Skill 的強制執行效果
+
+id: E2E-014
+name: "複用優先原則驗證"
+description: "測試 ARCHITECT、DEVELOPER、REVIEWER 是否正確執行 reuse-first 原則"
+
+# 模擬指令
+command: "規劃 日期格式化工具 loop"
+alternative_commands:
+  - "實作一個日期格式化功能並持續執行"
+  - "新增字串處理工具，然後 loop"
+  - "建立 HTTP 請求封裝功能並 loop"
+
+# 測試設定
+settings:
+  max_iterations: 10
+  timeout_minutes: 15
+  bypass_mode: false
+  risk_override: null
+
+# 預期行為
+expectations:
+  # 流程順序
+  flow:
+    - agent: architect
+      action: "規劃任務（必須包含複用分析）"
+      expected_output_contains:
+        - "複用"
+        - "現有"
+      tools_must_use:
+        - "Grep"
+        - "Glob"
+
+    - agent: developer
+      action: "實作功能（必須先搜尋）"
+      tools_sequence:
+        - before_write: ["Grep", "Glob"]
+      expected_output_contains:
+        - "搜尋"
+        - "現有"
+
+    - agent: reviewer
+      action: "審查複用合規性"
+      must_check:
+        - "搜尋證據"
+        - "重複程式碼"
+        - "可抽取邏輯"
+      expected_verdict_if_compliant: "APPROVE"
+      expected_verdict_if_violation: "REQUEST CHANGES"
+
+    - agent: tester
+      action: "執行測試"
+      expected_result: "PASS"
+
+  # ARCHITECT 階段
+  architect_phase:
+    must_search:
+      - description: "使用 Grep 搜尋現有類似功能"
+        pattern: "Grep.*utils|helpers|lib"
+      - description: "使用 Glob 檢查工具目錄"
+        pattern: "Glob.*utils/.*|helpers/.*|lib/.*"
+    must_document:
+      - "tasks.md 標註「複用」或「新建」"
+      - "說明複用/新建的理由"
+
+  # DEVELOPER 階段
+  developer_phase:
+    must_search_before_write:
+      - "搜尋專案內現有程式碼"
+      - "檢查已安裝套件"
+    dry_principle:
+      - "發現重複時必須抽取"
+      - "不可複製貼上程式碼"
+    tools_order_check:
+      read_tools: ["Grep", "Glob", "Read"]
+      write_tools: ["Write", "Edit"]
+      rule: "read_tools 必須在 write_tools 之前"
+
+  # REVIEWER 階段
+  reviewer_phase:
+    must_check:
+      - "是否有搜尋證據"
+      - "是否有不必要的重複"
+      - "是否有可抽取的共用邏輯"
+    reject_if:
+      - "沒有搜尋現有資源就直接實作"
+      - "存在明顯的重複程式碼"
+      - "重新實作了已存在的功能"
+    approval_requires:
+      - "有明確的搜尋證據"
+      - "無重複程式碼"
+      - "合理的複用/新建理由"
+
+  # 風險等級
+  risk_level:
+    expected: "MEDIUM"
+    acceptable: ["LOW", "MEDIUM"]
+
+  # 合規性
+  compliance:
+    min_rate: 90
+    max_violations: 2
+    violations_must_fix: true
+
+  # 最終狀態
+  final_state:
+    all_tasks_completed: true
+    state_files_cleaned: true
+    no_unfixed_violations: true
+
+# 成功條件
+success_criteria:
+  - "ARCHITECT 有執行複用分析"
+  - "DEVELOPER 有先搜尋後實作"
+  - "REVIEWER 有檢查複用原則"
+  - "無不必要的重複程式碼"
+  - "合規率 >= 90%"
+  - "D→R→T 流程正確執行"
+
+# 失敗條件
+failure_criteria:
+  - "跳過複用檢查直接實作"
+  - "存在明顯的重複程式碼"
+  - "重新實作已存在的功能"
+  - "REVIEWER 未檢查複用原則"
+  - "合規率 < 90%"
+  - "達到最大迭代次數"
+
+# 特殊測試點
+special_tests:
+  - name: "搜尋證據驗證"
+    description: "確認 DEVELOPER 在 Write/Edit 前有執行 Grep/Glob"
+    check: "工具呼叫順序分析"
+    expected: "Grep/Glob 在 Write/Edit 之前"
+    method: "分析 session 日誌中的工具呼叫順序"
+
+  - name: "重複偵測"
+    description: "確認 REVIEWER 有檢查重複程式碼"
+    check: "審查報告內容分析"
+    expected: "包含重複程式碼檢查結果"
+    method: "搜尋 REVIEWER 輸出中是否包含「重複」關鍵字"
+
+  - name: "DRY 違規處理"
+    description: "確認發現重複時有正確處理"
+    check: "如發現重複，是否有 REQUEST CHANGES"
+    expected: "重複時標記 REQUEST CHANGES"
+    method: "分析 REVIEWER 決策與程式碼狀態"
+
+  - name: "複用分析完整性"
+    description: "確認 ARCHITECT 有執行完整的複用分析"
+    check: "tasks.md 內容檢查"
+    expected: "包含複用決策與理由"
+    method: "檢查 tasks.md 是否包含「複用」或「新建」標註"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  # 驗證 E2E-014 測試結果
+
+  SESSION_ID="$1"
+  SUMMARY=$(source tests/e2e/lib/stats-aggregator.sh && aggregate_stats "$SESSION_ID")
+
+  # 檢查合規率
+  RATE=$(echo "$SUMMARY" | grep -o '"compliance_rate":"[^"]*"' | cut -d'"' -f4 | tr -d '%')
+  if [ -n "$RATE" ] && [ "$RATE" -ge 90 ]; then
+    echo "✅ 合規率檢查通過: ${RATE}%"
+  else
+    echo "❌ 合規率檢查失敗: ${RATE}%"
+    exit 1
+  fi
+
+  # 檢查違規
+  VIOLATIONS=$(echo "$SUMMARY" | grep -o '"unfixed_violations":[0-9]*' | cut -d':' -f2)
+  if [ "$VIOLATIONS" -le 2 ]; then
+    echo "✅ 違規數在可接受範圍: $VIOLATIONS"
+  else
+    echo "❌ 違規數過高: $VIOLATIONS"
+    exit 1
+  fi
+
+  # 檢查 reuse-first 特定標記
+  # 這裡需要實際的 session 日誌來驗證，目前先簡化
+  echo "ℹ️  reuse-first 專項檢查需要手動驗證："
+  echo "   - ARCHITECT 是否執行 Grep/Glob"
+  echo "   - DEVELOPER 是否先搜尋後實作"
+  echo "   - REVIEWER 是否檢查複用原則"
+
+  echo "✅ E2E-014 基本檢查通過"

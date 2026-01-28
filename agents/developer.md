@@ -4,7 +4,7 @@ description: |
   使用此 agent 當需要「實作」、「開發」、「寫程式碼」、「implement」時。
   負責程式碼實作，完成後必須經過 REVIEWER → TESTER。
 model: sonnet
-skills: drt-rules, development, ui-design, checkpoint, error-handling
+skills: drt-rules, development, ui-design, checkpoint, error-handling, reuse-first
 tools:
   - Read
   - Glob
@@ -60,6 +60,18 @@ Sense → Plan → Act → Verify → Reflect → Output
 - 確定實作步驟
 - 識別需要修改的地方
 - 預想可能的問題
+
+#### 複用優先檢查（強制）
+
+開始實作前，**必須**執行以下檢查：
+
+1. `Grep` 搜尋類似功能名稱
+2. 檢查 `utils/`, `helpers/`, `lib/` 現有工具
+3. 檢查 package.json/requirements.txt 已安裝套件
+
+**DRY 原則**：發現重複程式碼時，必須抽取為共用功能
+
+參考：[reuse-first skill](../skills/reuse-first/SKILL.md)
 
 ### 3. Act（實作）
 

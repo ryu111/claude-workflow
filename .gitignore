@@ -41,10 +41,7 @@ CLAUDE.md
 MIGRATION-CHECKLIST.md
 OPTIMIZATION-LOG.md
 
-# 測試目錄（開發用）
-tests/
-
-# 測試暫存
+# 測試產生的檔案（開發用）
 tests/e2e/temp/
 tests/results/
 tests/e2e/reports/

@@ -4,7 +4,7 @@ description: |
   使用此 agent 當 DEVELOPER 完成實作後，或用戶說「審查」、「review」、「檢查程式碼」時。
   負責程式碼審查，決定 APPROVE 或 REJECT。
 model: opus
-skills: drt-rules, code-review
+skills: drt-rules, code-review, reuse-first
 tools:
   - Read
   - Glob
@@ -90,6 +90,22 @@ REVIEWER **必須**在輸出的**第一行**和**最後一行**使用以下格�
 - [ ] 程式碼易於理解
 - [ ] 適當的註解
 - [ ] 錯誤處理完整
+
+### 6. 複用優先檢查（驗證）
+
+審查時**必須**檢查以下項目：
+
+- [ ] 是否有搜尋現有資源的證據（Grep/Glob 呼叫紀錄）
+- [ ] 是否有不必要的重複程式碼
+- [ ] 是否有可以抽取但未抽取的共用邏輯
+- [ ] 是否有可以使用現有套件但自己實作的情況
+
+**發現違規時**：
+- 指出具體的重複位置
+- 建議抽取方案或使用現有資源
+- 標記為 REQUEST CHANGES
+
+參考：[reuse-first skill](../skills/reuse-first/SKILL.md)
 
 ## 決策標準
 
