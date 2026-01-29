@@ -159,6 +159,56 @@ DEVELOPER ─► REVIEWER ─► TESTER ─► 人工確認
 | 🟡 MEDIUM | 3 次 | 等待用戶介入 |
 | 🔴 HIGH | 2 次 | 暫停 + 通知用戶 |
 
+## Main Agent Bash 使用規則
+
+Main Agent **可以直接使用 Bash** 執行以下操作：
+
+### ✅ 允許的操作
+
+```bash
+# 所有讀取操作
+git log | head -10          # 管道是安全的
+git status
+npm test | grep PASS
+cat file.txt | wc -l
+ls -la $(pwd)               # 命令替換是安全的
+find . -name "*.ts"
+
+# 版本控制
+git add/commit/push/pull
+git branch/checkout/merge
+
+# 測試和檢查
+npm test / npm run lint
+pytest / cargo test
+
+# 系統資訊
+node --version
+which python
+```
+
+### ❌ 需要委派 DEVELOPER 的操作
+
+```bash
+# 檔案寫入操作
+echo "x" > file.txt         # 覆寫寫入
+cat x >> file.txt           # 追加寫入
+echo "x" | tee file.txt     # tee 寫入
+
+# 程式碼修改（使用 Write/Edit 工具）
+# → 必須委派給 DEVELOPER agent
+```
+
+### 判斷原則
+
+```
+問自己：這個命令會「寫入檔案」嗎？
+  │
+  ├─ 否 → Main Agent 直接執行
+  │
+  └─ 是 → 委派給 DEVELOPER agent
+```
+
 ## 禁止行為
 
 ### 絕對禁止

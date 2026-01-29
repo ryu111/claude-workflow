@@ -85,72 +85,45 @@ fi
 echo "[$(date)] IS_SUBAGENT: $IS_SUBAGENT (agent: $CURRENT_AGENT)" >> "$DEBUG_LOG"
 
 # ═══════════════════════════════════════════════════════════════
-# 修正 2: Bash 命令白名單處理
+# Bash 命令檢查（簡化版 v0.6）
+# 核心原則：只阻擋「檔案寫入」操作，其他全部允許
 # ═══════════════════════════════════════════════════════════════
 
-# 對於 Bash 工具，檢查命令是否為唯讀操作
 if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
     COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
     echo "[$(date)] Bash command: $COMMAND" >> "$DEBUG_LOG"
 
-    # ═══════════════════════════════════════════════════════════════
-    # Plugin 腳本白名單（允許 Plugin 內部腳本執行）
-    # ═══════════════════════════════════════════════════════════════
-
-    # 允許來自 Plugin 目錄的腳本（Command 的 allowed-tools 授權）
-    PLUGIN_SCRIPT_PATTERNS=(
-        # claude-workflow plugin
-        "claude-workflow.*/scripts/init\\.sh"
-        "claude-workflow.*/scripts/validate-.*\\.sh"
-    )
-
-    is_plugin_script() {
-        local cmd="$1"
-        for pattern in "${PLUGIN_SCRIPT_PATTERNS[@]}"; do
-            if echo "$cmd" | grep -qE "$pattern"; then
-                return 0
-            fi
-        done
-        return 1
-    }
-
-    # 檢查是否為 Plugin 腳本
-    if is_plugin_script "$COMMAND"; then
-        echo "[$(date)] Plugin script allowed: $COMMAND" >> "$DEBUG_LOG"
-        exit 0
-    fi
-
-    # ═══════════════════════════════════════════════════════════════
-    # 危險操作符檢查
-    # ═══════════════════════════════════════════════════════════════
-
-    # 先移除安全的重定向模式，再檢查危險運算符
-    # 安全的重定向：2>/dev/null, 2>&1, >/dev/null, 1>/dev/null
+    # 移除安全的重定向（不會寫入檔案）：
+    # - 2>/dev/null, >/dev/null, 1>/dev/null（丟棄輸出）
+    # - 2>&1, 1>&2（合併輸出流）
     COMMAND_SANITIZED=$(echo "$COMMAND" | sed -E 's/[0-9]*>(&[0-9]+|\/dev\/null)//g')
     echo "[$(date)] Sanitized command: $COMMAND_SANITIZED" >> "$DEBUG_LOG"
 
-    # 檢查是否包含寫入運算符（即使命令本身在白名單中）
-    # 使用字元類 [|] 明確匹配管道符，避免轉義混淆
-    # 危險運算符：重定向(>/>>) + 管道([|]) + tee + 反引號 + 命令替換
-    DANGEROUS_OPERATORS=">|>>|[|]|tee|\\\`|\\$\\("
-    if echo "$COMMAND_SANITIZED" | grep -qE "$DANGEROUS_OPERATORS"; then
-        echo "[$(date)] Bash command blocked (contains dangerous operators)" >> "$DEBUG_LOG"
-        # 繼續執行阻擋邏輯（不 exit 0）
+    # ═══════════════════════════════════════════════════════════════
+    # 檔案寫入檢測（唯一的阻擋條件）
+    # ═══════════════════════════════════════════════════════════════
+    #
+    # 阻擋的操作：
+    #   > file     覆寫寫入（但不是 >&2 這類流重定向）
+    #   >> file    追加寫入
+    #   tee file   寫入檔案（但允許 tee /dev/null）
+    #
+    # 允許的操作：
+    #   |          管道（git log | head）
+    #   $()        命令替換
+    #   ``         反引號命令替換
+    #   所有讀取命令（cat, grep, find, git, npm, etc.）
+    #
+    # ═══════════════════════════════════════════════════════════════
+
+    FILE_WRITE_PATTERN='(^|[;&\s])(>|>>)\s*[^&\s]|\btee\s+([^-/]|$)|\btee\s+-[^a]\s*[^/]'
+
+    if echo "$COMMAND_SANITIZED" | grep -qE "$FILE_WRITE_PATTERN"; then
+        echo "[$(date)] Bash command blocked (file write detected)" >> "$DEBUG_LOG"
+        # 繼續執行阻擋邏輯
     else
-        # ═══════════════════════════════════════════════════════════════
-        # 唯讀命令白名單（擴展版）
-        # ═══════════════════════════════════════════════════════════════
-
-        # 白名單：允許的命令前綴
-        # - git: 所有 git 命令（包含 commit, push, pull, add 等）
-        # - 測試與格式化檢查工具
-        # - 系統資訊查詢命令
-        READONLY_PATTERNS="^(git |ls|pwd|cat|head|tail|wc|grep|rg|ag|find|which|file|stat|du|df|date|uname|whoami|hostname|env|printenv|type|node --version|npm --version|npm list|npm ls|python --version|pip --version|pip list|pip show|go version|cargo --version|rustc --version|jq|yq|npm (test|run test|run lint|run check)|npx |yarn (test|lint)|pytest|python -m pytest|go test|cargo test|make test|prettier --check|eslint --print-config|black --check|ruff check)"
-
-        if echo "$COMMAND" | grep -qE "$READONLY_PATTERNS"; then
-            echo "[$(date)] Bash command allowed (whitelisted command)" >> "$DEBUG_LOG"
-            exit 0
-        fi
+        echo "[$(date)] Bash command allowed (no file write)" >> "$DEBUG_LOG"
+        exit 0
     fi
 fi
 
