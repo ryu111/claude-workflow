@@ -96,7 +96,7 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
     # 移除安全的重定向（不會寫入檔案）：
     # - 2>/dev/null, >/dev/null, 1>/dev/null（丟棄輸出）
     # - 2>&1, 1>&2（合併輸出流）
-    COMMAND_SANITIZED=$(echo "$COMMAND" | sed -E 's/[0-9]*>(&[0-9]+|\/dev\/null)//g')
+    COMMAND_SANITIZED=$(echo "$COMMAND" | sed -E 's/[0-9]*> *(&[0-9]+|\/dev\/null)//g' | sed -E 's/[0-9]*>> *\/dev\/null//g')
     echo "[$(date)] Sanitized command: $COMMAND_SANITIZED" >> "$DEBUG_LOG"
 
     # ═══════════════════════════════════════════════════════════════
@@ -116,7 +116,7 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
     #
     # ═══════════════════════════════════════════════════════════════
 
-    FILE_WRITE_PATTERN='(^|[;&[:space:]])(>>?)[[:space:]]*[^&[:space:]]|[[:space:]]tee[[:space:]]'
+    FILE_WRITE_PATTERN='(^|[;&[:space:]])([0-9]*>>?)[[:space:]]*[^&[:space:]]|[[:space:]]tee[[:space:]]'
 
     if echo "$COMMAND_SANITIZED" | grep -qE "$FILE_WRITE_PATTERN"; then
         echo "[$(date)] Bash command blocked (file write detected)" >> "$DEBUG_LOG"
