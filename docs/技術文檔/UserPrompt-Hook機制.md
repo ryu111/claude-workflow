@@ -398,19 +398,20 @@ rm /tmp/claude-workflow-debug.log
 - **JSON 生成**：使用 `jq -n --arg` 確保 JSON 格式安全
 - **檔案讀取**：驗證路徑與權限，防止任意檔案讀取
 
-## 相關文件
+## 相關檔案
 
-- **提案規格**：`openspec/changes/userprompt-hook/proposal.md`
 - **腳本實作**：`hooks/scripts/keyword-detector.sh`
 - **範本目錄**：`hooks/templates/`
 - **Hook 配置**：`hooks/hooks.json`
 - **測試腳本**：`tests/scripts/test-ts-keyword-detector.sh`
+- **歷史提案**：`openspec/archive/userprompt-hook/proposal.md`
 
 ## 版本歷史
 
 | 版本 | 日期 | 變更內容 |
 |------|------|----------|
-| 1.0.0 | 2024-01 | 初始版本，支援 8 種關鍵字類型 |
+| 1.0.0 | 2026-01 | 初始版本，支援 8 種關鍵字類型 |
+| 1.1.0 | 2026-01 | 新增 Loop 模式自動偵測 change-id |
 
 ## 未來規劃
 
