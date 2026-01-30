@@ -129,6 +129,147 @@ fi
 - Issue #73: ralplan skips critic agent execution
 - PR #76: Fix for critic execution
 
+## v0.7 控制機制簡化優化
+
+### 設計理念：最小必要阻擋
+
+v0.7 版本重新審視了控制層級設計，採用「**最小必要阻擋**」原則：
+
+| 層級 | 機制 | 適用對象 |
+|------|------|----------|
+| Layer 1: 硬阻擋 | tools 白名單 | 所有 Agent |
+| Layer 2: 引導 | Skill + Prompt | 流程與行為 |
+| Layer 3: 驗證 | Hook 檢查 | 輸出格式 |
+
+### 核心變更：移除 disallowedTools
+
+**之前 (v0.6 及更早)**：
+```yaml
+name: reviewer
+tools:
+  - Read
+  - Glob
+  - Grep
+disallowedTools:
+  - Write
+  - Edit
+  - Bash
+  - Task
+```
+
+**之後 (v0.7)**：
+```yaml
+name: reviewer
+tools:
+  - Read
+  - Glob
+  - Grep
+# 不再需要 disallowedTools，白名單本身已經足夠
+```
+
+### 為什麼移除？
+
+#### 1. 冗餘設計
+
+```
+tools: [Read, Glob, Grep]  ← 白名單本身已經「禁止」其他工具
+disallowedTools: [Write, Edit, Bash, Task]  ← 多餘的黑名單
+```
+
+Claude Code Plugin 的工具權限機制：
+- 只有在 `tools:` 中列出的工具才能使用
+- 未列出的工具自動不可用
+- 不需要額外的黑名單來「重複禁止」
+
+#### 2. 維護負擔
+
+每次新增工具到系統時，需要同步更新：
+- ❌ 需要檢查每個 Agent 的 disallowedTools
+- ❌ 容易遺漏更新
+- ✅ 只需關注白名單即可
+
+#### 3. 語意清晰
+
+```markdown
+# ✅ 清晰：這個 Agent 可以做什麼
+tools: [Read, Glob, Grep]
+
+# ❌ 冗餘：重複說明不能做什麼（已經隱含在白名單中）
+disallowedTools: [Write, Edit, Bash, Task]
+```
+
+### 控制層級對比
+
+| Agent | v0.6 | v0.7 | 簡化效果 |
+|-------|------|------|----------|
+| REVIEWER | tools + disallowedTools | 僅 tools | -4 行配置 |
+| TESTER | tools + disallowedTools | 僅 tools | -3 行配置 |
+| DEBUGGER | tools + disallowedTools | 僅 tools | -2 行配置 |
+
+### 設計權衡：安全性 vs 便利性
+
+```
+        v0.5              v0.6                  v0.7
+        ────              ────                  ────
+         │                 │                     │
+安全性   ██████████        ████████████          ██████████
+便利性   ████              ██████                ████████
+
+         極嚴格            過度嚴格              平衡
+```
+
+#### v0.5 的問題
+- 過度阻擋，連 Main Agent 都無法執行常見操作
+- 用戶體驗差
+
+#### v0.6 的過度設計
+- 雙層黑名單（tools 白名單 + disallowedTools 黑名單）
+- 維護複雜
+
+#### v0.7 的平衡
+- **保留**：D→R→T 流程保護（Hook 阻擋違規路徑）
+- **簡化**：移除冗餘的 disallowedTools
+- **放寬**：允許所有讀取操作，只阻擋寫入核心程式碼
+
+### 實際效果
+
+#### 仍然被保護的路徑
+```
+❌ DEVELOPER 跳過 REVIEWER 直接測試
+    → workflow-gate.sh 阻擋
+
+❌ Main Agent 修改核心程式碼（保護目錄）
+    → global-workflow-guard.sh 阻擋
+
+❌ REVIEWER 嘗試修改程式碼
+    → tools 白名單阻擋（無 Write/Edit）
+```
+
+#### 被允許的操作
+```
+✅ Main Agent 執行 git 操作
+    → 白名單包含 Bash
+
+✅ Main Agent 修改文檔檔案
+    → 不在保護目錄中
+
+✅ 所有 Agent 讀取任何檔案
+    → Read 工具不受限
+```
+
+### 結論
+
+v0.7 證明了「**好的設計是刪除不必要的部分**」：
+
+- ✅ **更簡單**：移除冗餘配置
+- ✅ **更清晰**：語意明確
+- ✅ **更易維護**：減少同步點
+- ✅ **同樣安全**：核心保護機制不變
+
+**核心洞察**：
+> 安全性來自白名單，不需要額外的黑名單來「重複禁止」。專注於「允許什麼」，而非「禁止什麼」。
+
 ## 更新記錄
 
+- 2026-01-31: 新增 v0.7 控制機制簡化優化章節
 - 2026-01-30: 初版，基於 OMC 對比分析

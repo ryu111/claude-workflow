@@ -9,11 +9,6 @@ tools:
   - Read
   - Glob
   - Grep
-disallowedTools:
-  - Write
-  - Edit
-  - Bash
-  - Task
 ---
 
 # 🔍 REVIEWER Agent

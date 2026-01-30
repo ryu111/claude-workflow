@@ -116,7 +116,7 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
     #
     # ═══════════════════════════════════════════════════════════════
 
-    FILE_WRITE_PATTERN='(^|[;&\s])(>|>>)\s*[^&\s]|\btee\s+([^-/]|$)|\btee\s+-[^a]\s*[^/]'
+    FILE_WRITE_PATTERN='(^|[;&[:space:]])(>>?)[[:space:]]*[^&[:space:]]|[[:space:]]tee[[:space:]]'
 
     if echo "$COMMAND_SANITIZED" | grep -qE "$FILE_WRITE_PATTERN"; then
         echo "[$(date)] Bash command blocked (file write detected)" >> "$DEBUG_LOG"
@@ -128,55 +128,33 @@ if [ "$TOOL_NAME" = "Bash" ] && [ "$IS_SUBAGENT" = false ]; then
 fi
 
 # ═══════════════════════════════════════════════════════════════
-# 黑名單檢查（刪去法：只有這些需要 D→R→T）
+# 黑名單檢查（簡化版：只阻擋程式碼檔案和保護目錄）
 # ═══════════════════════════════════════════════════════════════
 
-# 程式碼副檔名（需要 D→R→T）
-CODE_EXTENSIONS="ts|js|jsx|tsx|py|sh|go|java|c|cpp|h|hpp|cs|sql|rs|rb|swift|kt|scala|php|lua|pl|r"
+# 程式碼檔案副檔名正則（需要 D→R→T）
+CODE_FILE_PATTERN='\.(ts|tsx|js|jsx|py|sh|go|java|c|cpp|h|hpp|cs|sql|rs|rb|swift|kt|scala|php|lua|pl|r)$'
 
-# 核心目錄（需要 D→R→T）
-CORE_DIRECTORIES=(
-    "hooks/"            # 整個 hooks 目錄（包含 hooks.json 配置檔案）
-    "agents/"
-    ".claude-plugin/"
-)
+# 保護目錄正則（需要 D→R→T）
+PROTECTED_DIRS='(^|/)hooks/|(^|/)agents/|(^|/)\.claude-plugin/'
 
-# 檢查是否為程式碼檔案
-is_code_file() {
-    local file_path="$1"
-    local ext="${file_path##*.}"
-    echo "$ext" | grep -qiE "^($CODE_EXTENSIONS)$"
-}
-
-# 檢查是否在核心目錄
-is_core_directory() {
-    local file_path="$1"
-    for dir in "${CORE_DIRECTORIES[@]}"; do
-        if [[ "$file_path" == *"$dir"* ]]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-# 判斷是否需要 D→R→T
+# 簡化判斷：是否需要 D→R→T
 needs_drt() {
     local file_path="$1"
 
-    # 程式碼檔案 → 需要 D→R→T
-    if is_code_file "$file_path"; then
-        echo "[$(date)] Blacklist check: code file detected ($file_path)" >> "$DEBUG_LOG"
+    # 檢查是否為保護目錄
+    if [[ "$file_path" =~ $PROTECTED_DIRS ]]; then
+        echo "[$(date)] Blacklist: protected directory ($file_path)" >> "$DEBUG_LOG"
         return 0
     fi
 
-    # 核心目錄 → 需要 D→R→T
-    if is_core_directory "$file_path"; then
-        echo "[$(date)] Blacklist check: core directory detected ($file_path)" >> "$DEBUG_LOG"
+    # 檢查是否為程式碼檔案
+    if [[ "$file_path" =~ $CODE_FILE_PATTERN ]]; then
+        echo "[$(date)] Blacklist: code file ($file_path)" >> "$DEBUG_LOG"
         return 0
     fi
 
-    # 其他 → Main Agent 可以直接做
-    echo "[$(date)] Blacklist check: allowed (non-code, non-core: $file_path)" >> "$DEBUG_LOG"
+    # 其他檔案允許 Main Agent 直接操作
+    echo "[$(date)] Blacklist: allowed (non-code, non-protected: $file_path)" >> "$DEBUG_LOG"
     return 1
 }
 
@@ -256,18 +234,18 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
         BLOCK_REASON="failed to parse file_path (conservative blocking)"
         # 繼續執行阻擋邏輯（不 exit）
     else
-        # 黑名單檢查：只有程式碼和核心目錄需要 D→R→T
+        # 黑名單檢查：只有程式碼和保護目錄需要 D→R→T
         if ! needs_drt "$FILE_PATH"; then
-            echo "[$(date)] ✅ Blacklist: Main Agent allowed to modify $FILE_PATH (non-code, non-core)" >> "$DEBUG_LOG"
+            echo "[$(date)] ✅ Blacklist: Main Agent allowed to modify $FILE_PATH (non-code, non-protected)" >> "$DEBUG_LOG"
             exit 0  # 允許 Main Agent 直接修改
         else
             # 需要 D→R→T，繼續執行阻擋邏輯
-            if is_code_file "$FILE_PATH"; then
-                BLOCK_REASON="code file (*.${FILE_PATH##*.})"
-            elif is_core_directory "$FILE_PATH"; then
-                BLOCK_REASON="core directory"
+            if [[ "$FILE_PATH" =~ $PROTECTED_DIRS ]]; then
+                BLOCK_REASON="保護目錄 (hooks/agents/.claude-plugin/)"
+            elif [[ "$FILE_PATH" =~ $CODE_FILE_PATTERN ]]; then
+                BLOCK_REASON="程式碼檔案 (*.${FILE_PATH##*.})"
             else
-                BLOCK_REASON="unknown"
+                BLOCK_REASON="受保護資源"
             fi
             echo "[$(date)] 🚫 Blacklist: blocked - $BLOCK_REASON: $FILE_PATH" >> "$DEBUG_LOG"
         fi
@@ -308,9 +286,15 @@ echo "💡 為什麼？" >&2
 echo "   D→R→T 工作流確保所有程式碼變更經過：" >&2
 echo "   DEVELOPER → REVIEWER → TESTER" >&2
 echo "" >&2
-echo "📝 黑名單規則：" >&2
-echo "   ✅ 允許修改：文檔(.md)、配置(.json, .yaml)、非核心目錄" >&2
-echo "   🚫 需要 D→R→T：程式碼檔案、hooks/、agents/、.claude-plugin/" >&2
+echo "📝 規則說明：" >&2
+echo "   🚫 需要 D→R→T 流程的資源：" >&2
+echo "      • 程式碼檔案（.ts/.js/.py/.sh 等）" >&2
+echo "      • 保護目錄（hooks/, agents/, .claude-plugin/）" >&2
+echo "" >&2
+echo "   ✅ Main Agent 可直接修改：" >&2
+echo "      • 文檔（.md, .txt）" >&2
+echo "      • 配置（.json, .yaml, .toml）在非保護目錄" >&2
+echo "      • 其他非程式碼檔案" >&2
 echo "" >&2
 
 # 輸出 JSON 阻擋決策到 stdout（供 Claude Code 解析）

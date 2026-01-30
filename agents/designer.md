@@ -11,9 +11,6 @@ tools:
   - Grep
   - Write
   - Task
-disallowedTools:
-  - Edit
-  - Bash
 ---
 
 # 🎨 DESIGNER Agent

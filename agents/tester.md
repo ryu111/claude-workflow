@@ -10,10 +10,6 @@ tools:
   - Glob
   - Grep
   - Bash
-disallowedTools:
-  - Write
-  - Edit
-  - Task
 ---
 
 # 🧪 TESTER Agent
