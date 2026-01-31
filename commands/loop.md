@@ -142,6 +142,62 @@ while (有未完成的任務) {
 
 **自動持續執行**：除非用戶明確中斷或遇到無法解決的錯誤，否則系統必須持續執行直到所有任務完成。
 
+## 狀態檔案管理
+
+### 狀態目錄
+
+Loop 執行期間會在以下目錄產生 D→R→T 狀態檔案：
+
+| 目錄 | 用途 | 說明 |
+|------|------|------|
+| `.drt-state/` | 標準狀態目錄 | 隱藏目錄，手動建立的狀態 |
+| `drt-state-auto/` | 自動狀態目錄 | 自動生成的狀態檔案 |
+
+### 清理時機
+
+狀態檔案會在以下時機被自動清理：
+
+| 時機 | 條件 | 清理工具 |
+|------|------|----------|
+| 立即刪除 | 任務完成（result: pass/complete） | `subagent-validator.sh` |
+| 過期清理 | 檔案超過 3 天 | `drt-state-cleanup.sh` |
+| 容量限制 | 目錄超過 10MB | `drt-state-cleanup.sh` |
+| Session 結束 | Session 關閉時 | `session-cleanup-report.sh` |
+
+### 孤兒檔案處理
+
+孤兒狀態檔案是指：
+- 無對應 OpenSpec 的狀態檔案
+- OpenSpec 已完成（Status: COMPLETED）的狀態檔案
+- OpenSpec 已歸檔（在 archive/ 中）的狀態檔案
+
+#### 預檢腳本
+
+Loop 啟動前可執行預檢，偵測並清理孤兒檔案：
+
+```bash
+# 掃描並顯示孤兒檔案
+bash hooks/scripts/loop-precheck.sh
+
+# 自動清理孤兒檔案
+bash hooks/scripts/loop-precheck.sh --auto-clean
+```
+
+#### 手動清理
+
+```bash
+# 執行完整清理（過期 + 容量 + 已完成）
+bash hooks/scripts/drt-state-cleanup.sh
+```
+
+### 故障排除
+
+| 問題 | 原因 | 解決方案 |
+|------|------|----------|
+| Loop 卡在舊任務 | 殘留狀態檔案 | 執行 `loop-precheck.sh --auto-clean` |
+| 狀態不一致 | Change ID 不匹配 | 清理孤兒檔案後重新執行 |
+| 磁碟空間不足 | 狀態檔案累積 | 執行 `drt-state-cleanup.sh` |
+
 ## 任務選取邏輯
 
 ### TodoList 模式

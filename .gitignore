@@ -33,8 +33,8 @@ build/
 # 測試產生的狀態檔案
 .drt-*
 
-# D→R→T 狀態檔案
-drt-state-auto/*.json
+# D→R→T 狀態目錄（運行時生成）
+/drt-state-auto/
 
 # 開發用檔案（非 Plugin 本體）
 CLAUDE.md
