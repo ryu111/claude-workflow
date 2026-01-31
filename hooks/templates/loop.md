@@ -1,102 +1,46 @@
-🚨 **強制執行 OpenSpec 任務流程** 🚨
+🚨 **偵測到 Loop 關鍵字** 🚨
 
-偵測到持續執行指令。此指示**覆蓋**你的任何其他計畫。
-
----
-
-## 🔄 強制持續執行模式
-
-Loop 啟動後，你**必須**自主持續執行，**不依賴任何外部 plugin**。
-
-### 核心行為
-1. **讀取任務** → 找到第一個 `[ ]` 未完成任務
-2. **委派執行** → 使用 Task 工具委派給對應 agent
-3. **等待完成** → agent 完成 D→R→T 流程
-4. **更新狀態** → 標記 `[x]` 完成
-5. **立即繼續** → **禁止詢問**，直接開始下一個任務
-6. **重複** → 直到所有任務完成
-
-### ⚠️ 強制規則
-- ❌ **禁止**詢問「是否繼續」
-- ❌ **禁止**等待用戶確認
-- ❌ **禁止**中途停止（除非用戶說「暫停」）
-- ✅ **必須**自動持續到完成
+你需要啟動 Ralph Loop 來執行持續任務。
 
 ---
 
-## ❌ 嚴格禁止以下操作
+## 📋 執行步驟
 
-**你（Main Agent）絕對禁止：**
-- ❌ 自行執行任務（必須委派給對應 agent）
-- ❌ 直接使用 `Write`、`Edit`、`Bash` 修改檔案
-- ❌ 跳過任務或改變執行順序
-- ❌ 省略更新 checkbox 狀態
+### 1. 檢查 OpenSpec
 
-**違反後果：** 繞過 D→R→T 工作流，導致未經審查的程式碼進入 codebase。
+首先檢查是否有進行中的 OpenSpec：
 
----
-
-## ✅ 必須執行的步驟
-
-**立即**按照以下順序執行：
-
-1. 檢查 `openspec/changes/` 目錄
-2. 讀取當前 change 的 `tasks.md`
-3. 找到第一個未完成的任務（`[ ]`）
-4. 根據 `agent:` 欄位呼叫對應的 agent（使用 Task 工具）
-5. 完成後**立即**更新 checkbox 為 `[x]`
-6. **不詢問**用戶，**立即**開始下一個任務
-7. 重複步驟 3-6 直到所有任務完成
-
----
-
-## 任務格式範例
-
-```
-- [ ] 1.1 任務名稱 | agent: developer | files: src/file.ts
+```bash
+ls openspec/changes/ 2>/dev/null
 ```
 
-## Agent 調用範例
+### 2. 啟動 Ralph Loop
 
-```python
-Task(
-  subagent_type='claude-workflow:developer',
-  prompt='執行任務 1.1：任務名稱'
-)
+根據情況選擇：
+
+**有 OpenSpec 時：**
+```
+/ralph-loop --openspec [change-id]
+```
+
+**無 OpenSpec 時（通用模式）：**
+```
+/ralph-loop "{{PROMPT}}" --max-iterations 50
 ```
 
 ---
 
-## 為什麼必須這樣做？
+## ⚠️ 重要提醒
 
-根據 **D→R→T 工作流規則**：
-- 所有程式碼變更必須經過 DEVELOPER → REVIEWER → TESTER
-- Main Agent 只負責協調和委派
-- 這確保所有變更都經過專業審查
-
----
-
-**⚠️ 重要提醒：即使用戶給了你詳細的實作計畫，你仍必須先檢查 openspec 任務狀態，並透過 Task 工具委派給適當的 agent。這是強制性的工作流。**
+- Ralph Loop 使用 Stop hook 強制持續執行
+- 只有達到 `--max-iterations` 或輸出 `<promise>完成文字</promise>` 才會停止
+- OpenSpec 模式會自動設定 completion_promise 為「所有任務完成」
 
 ---
 
-## ⚠️ 強制執行聲明
+## 📚 詳細規則
 
-Loop 啟動後，你**必須**：
-- ✅ 持續執行直到所有任務完成
-- ✅ 每個任務完成後**立即**開始下一個任務
-- ✅ **禁止**詢問用戶「是否繼續」或「是否執行下一個任務」
-- ✅ 自動處理所有可處理的任務
-
-**絕對禁止**：
-- ❌ 中途停止執行（除非符合以下暫停條件）
-- ❌ 跳過任何任務
-- ❌ 改變執行順序
-- ❌ 詢問用戶是否繼續
-
-**僅**在以下情況才可以暫停：
-- 用戶明確說「暫停」、「停」、「中斷」
-- 遇到無法自動解決的錯誤
-- 所有任務已完成
-
-**違反後果：** 任務不完整，需要重新執行整個流程。
+請參考：
+- `skills/ralph-loop/references/openspec-workflow.md` - OpenSpec 工作流
+- `skills/ralph-loop/references/progress-display.md` - 進度視覺化
+- `skills/ralph-loop/references/safety-mechanisms.md` - 安全閥機制

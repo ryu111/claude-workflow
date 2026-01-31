@@ -103,37 +103,38 @@ match_keyword() {
     fi
 }
 
-# 檢測關鍵字並返回最高優先級的匹配
+# 檢測關鍵字並返回所有匹配的類型（空格分隔）
 # 參數：$1 - 用戶輸入的 prompt
-# 輸出：匹配的類型（如 ARCHITECT）或空字串
+# 輸出：匹配的類型列表（如 "ARCHITECT LOOP"）或空字串
+# 設計：類似 CLI flag 組合，多個非衝突的 skill 可同時觸發
 detect_keywords() {
     local prompt="$1"
-    local best_match=""
-    local best_priority=999
+    local all_matches=""
+    local seen_types=""
 
     # 遍歷所有關鍵字映射
     for mapping in "${KEYWORD_MAPPINGS[@]}"; do
         # 解析映射：priority|type|keywords
-        local priority=$(echo "$mapping" | cut -d'|' -f1)
         local type=$(echo "$mapping" | cut -d'|' -f2)
         local keywords=$(echo "$mapping" | cut -d'|' -f3)
 
         # 檢查該類型的所有關鍵字
         for keyword in $keywords; do
             if match_keyword "$prompt" "$keyword"; then
-                echo "[$(date)] Matched keyword: '$keyword' -> $type (priority: $priority)" >> "$DEBUG_LOG"
+                echo "[$(date)] Matched keyword: '$keyword' -> $type" >> "$DEBUG_LOG"
 
-                # 如果優先級更高（數字更小），更新最佳匹配
-                if [ "$priority" -lt "$best_priority" ]; then
-                    best_match="$type"
-                    best_priority="$priority"
+                # 避免重複加入同一類型（去重）
+                if [[ ! " $seen_types " =~ " $type " ]]; then
+                    all_matches="${all_matches:+$all_matches }$type"
+                    seen_types="$seen_types $type"
+                    echo "[$(date)] Added type: $type (all_matches: $all_matches)" >> "$DEBUG_LOG"
                 fi
             fi
         done
     done
 
-    # 返回最佳匹配
-    echo "$best_match"
+    # 返回所有匹配
+    echo "$all_matches"
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -228,8 +229,8 @@ echo "[$(date)] Detected keywords: $DETECTED_KEYWORDS" >> "$DEBUG_LOG"
 # Loop 模式啟動檢測
 # ═══════════════════════════════════════════════════════════════
 
-# 檢測是否啟動 Loop 模式
-if [ "$DETECTED_KEYWORDS" = "LOOP" ]; then
+# 檢測是否啟動 Loop 模式（支援多技能組合觸發）
+if [[ " $DETECTED_KEYWORDS " =~ " LOOP " ]] || [[ "$DETECTED_KEYWORDS" = "LOOP" ]]; then
     # 狀態目錄
     STATE_DIR="${PWD}/.drt-state"
     mkdir -p "$STATE_DIR" 2>/dev/null
@@ -254,21 +255,34 @@ if [ "$DETECTED_KEYWORDS" = "LOOP" ]; then
     echo "[$(date)] Loop mode activated. Change ID: ${CHANGE_ID:-auto-detect}" >> "$DEBUG_LOG"
 fi
 
-# 如果檢測到關鍵字，載入並處理範本
+# 如果檢測到關鍵字，載入並處理範本（支援多個範本合併）
 if [ -n "$DETECTED_KEYWORDS" ]; then
-    # 將類型轉換為小寫（範本檔案名稱使用小寫）
-    AGENT_TYPE=$(echo "$DETECTED_KEYWORDS" | tr '[:upper:]' '[:lower:]')
+    # 遍歷所有匹配的類型
+    for KEYWORD_TYPE in $DETECTED_KEYWORDS; do
+        # 將類型轉換為小寫（範本檔案名稱使用小寫）
+        AGENT_TYPE=$(echo "$KEYWORD_TYPE" | tr '[:upper:]' '[:lower:]')
 
-    # 載入範本
-    TEMPLATE=$(load_template "$AGENT_TYPE")
+        # 載入範本
+        TEMPLATE=$(load_template "$AGENT_TYPE")
 
-    # 如果範本存在，進行變數替換
-    if [ -n "$TEMPLATE" ]; then
-        ADDITIONAL_CONTEXT=$(substitute_variables "$TEMPLATE" "$USER_PROMPT")
-        echo "[$(date)] Template processed for agent: $AGENT_TYPE" >> "$DEBUG_LOG"
-    else
-        echo "[$(date)] No template content for agent: $AGENT_TYPE" >> "$DEBUG_LOG"
-    fi
+        # 如果範本存在，進行變數替換並合併
+        if [ -n "$TEMPLATE" ]; then
+            PROCESSED=$(substitute_variables "$TEMPLATE" "$USER_PROMPT")
+            if [ -n "$ADDITIONAL_CONTEXT" ]; then
+                # 多個範本用分隔線連接
+                ADDITIONAL_CONTEXT="${ADDITIONAL_CONTEXT}
+
+---
+
+${PROCESSED}"
+            else
+                ADDITIONAL_CONTEXT="$PROCESSED"
+            fi
+            echo "[$(date)] Template processed for agent: $AGENT_TYPE" >> "$DEBUG_LOG"
+        else
+            echo "[$(date)] No template content for agent: $AGENT_TYPE" >> "$DEBUG_LOG"
+        fi
+    done
 fi
 
 # ═══════════════════════════════════════════════════════════════

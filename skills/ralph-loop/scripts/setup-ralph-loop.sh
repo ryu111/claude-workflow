@@ -9,10 +9,21 @@ set -euo pipefail
 PROMPT_PARTS=()
 MAX_ITERATIONS=0
 COMPLETION_PROMISE="null"
+OPENSPEC_MODE=false
+OPENSPEC_CHANGE_ID=""
 
 # Parse options and positional arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
+    --openspec)
+      OPENSPEC_MODE=true
+      # Check if next argument exists and is not another option
+      if [[ -n "${2:-}" ]] && [[ ! "$2" =~ ^-- ]]; then
+        OPENSPEC_CHANGE_ID="$2"
+        shift
+      fi
+      shift
+      ;;
     -h|--help)
       cat << 'HELP_EOF'
 Ralph Loop - Interactive self-referential development loop
@@ -24,6 +35,7 @@ ARGUMENTS:
   PROMPT...    Initial prompt to start the loop (can be multiple words without quotes)
 
 OPTIONS:
+  --openspec [CHANGE_ID]         OpenSpec mode: auto-execute tasks from tasks.md
   --max-iterations <n>           Maximum iterations before auto-stop (default: unlimited)
   --completion-promise '<text>'  Promise phrase (USE QUOTES for multi-word)
   -h, --help                     Show this help message
@@ -44,6 +56,8 @@ EXAMPLES:
   /ralph-loop --max-iterations 10 Fix the auth bug
   /ralph-loop Refactor cache layer  (runs forever)
   /ralph-loop --completion-promise 'TASK COMPLETE' Create a REST API
+  /ralph-loop --openspec                      (auto-detect change)
+  /ralph-loop --openspec my-feature           (specific change)
 
 STOPPING:
   Only by reaching --max-iterations or detecting --completion-promise
@@ -110,7 +124,59 @@ HELP_EOF
 done
 
 # Join all prompt parts with spaces
-PROMPT="${PROMPT_PARTS[*]}"
+# Use ${array[*]:-} pattern to safely handle empty arrays (compatible with set -u)
+PROMPT="${PROMPT_PARTS[*]:-}"
+
+# OpenSpec mode: auto-detect or validate change ID
+if [[ "$OPENSPEC_MODE" == "true" ]]; then
+  OPENSPEC_DIR="openspec/changes"
+
+  # If no change ID provided, try to auto-detect
+  if [[ -z "$OPENSPEC_CHANGE_ID" ]]; then
+    if [[ -d "$OPENSPEC_DIR" ]]; then
+      # Find the most recently modified change
+      OPENSPEC_CHANGE_ID=$(ls -t "$OPENSPEC_DIR" 2>/dev/null | head -1)
+    fi
+  fi
+
+  # Validate change ID exists
+  if [[ -z "$OPENSPEC_CHANGE_ID" ]]; then
+    echo "❌ Error: No OpenSpec change found" >&2
+    echo "" >&2
+    echo "   Either specify a change ID:" >&2
+    echo "     /ralph-loop --openspec my-feature" >&2
+    echo "" >&2
+    echo "   Or create an OpenSpec first:" >&2
+    echo "     /plan my-feature" >&2
+    exit 1
+  fi
+
+  TASKS_FILE="$OPENSPEC_DIR/$OPENSPEC_CHANGE_ID/tasks.md"
+  if [[ ! -f "$TASKS_FILE" ]]; then
+    echo "❌ Error: tasks.md not found for change '$OPENSPEC_CHANGE_ID'" >&2
+    echo "" >&2
+    echo "   Expected: $TASKS_FILE" >&2
+    echo "" >&2
+    echo "   Available changes:" >&2
+    ls -1 "$OPENSPEC_DIR" 2>/dev/null | sed 's/^/     /' || echo "     (none)"
+    exit 1
+  fi
+
+  # Set default prompt for OpenSpec mode
+  if [[ -z "$PROMPT" ]] || [[ "${#PROMPT_PARTS[@]}" -eq 0 ]]; then
+    PROMPT="執行 OpenSpec 任務：$OPENSPEC_CHANGE_ID"
+  fi
+
+  # Set default completion promise for OpenSpec mode
+  if [[ "$COMPLETION_PROMISE" == "null" ]]; then
+    COMPLETION_PROMISE="所有任務完成"
+  fi
+
+  # Set default max iterations for OpenSpec mode
+  if [[ "$MAX_ITERATIONS" -eq 0 ]]; then
+    MAX_ITERATIONS=100
+  fi
+fi
 
 # Validate prompt is non-empty
 if [[ -z "$PROMPT" ]]; then
@@ -143,6 +209,8 @@ active: true
 iteration: 1
 max_iterations: $MAX_ITERATIONS
 completion_promise: $COMPLETION_PROMISE_YAML
+openspec_mode: $OPENSPEC_MODE
+openspec_change_id: "$OPENSPEC_CHANGE_ID"
 started_at: "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ---
 
