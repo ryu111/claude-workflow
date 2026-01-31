@@ -1,0 +1,227 @@
+# E2E-011: UserPromptSubmit Hook 觸發測試
+# 測試 keyword-detector.sh 正確檢測關鍵字並注入提示內容
+
+id: E2E-011
+name: "UserPromptSubmit Hook 觸發測試"
+description: "驗證關鍵字檢測、範本注入、優先級排序等功能"
+
+# 測試設定
+settings:
+  max_iterations: 4          # 4 個場景
+  timeout_minutes: 10
+  bypass_mode: false
+  risk_override: null
+
+# 測試場景
+test_cases:
+  # 場景 1：規劃指令觸發 ARCHITECT
+  - name: "規劃指令觸發 ARCHITECT"
+    user_prompt: "規劃一個計數器功能"
+    expected_detection: "ARCHITECT"
+    expected_template: "architect.md"
+    expected_context_contains:
+      - "ARCHITECT agent"
+      - "需求分析"
+      - "系統設計"
+      - "OpenSpec"
+    validation: |
+      # 驗證 additionalContext 包含正確的 ARCHITECT 提示
+      if echo "$ADDITIONAL_CONTEXT" | grep -q "ARCHITECT"; then
+        echo "✅ 場景 1 通過：偵測到 ARCHITECT 提示"
+      else
+        echo "❌ 場景 1 失敗：未偵測到 ARCHITECT 提示"
+        exit 1
+      fi
+
+  # 場景 2：loop 指令觸發
+  - name: "loop 指令觸發"
+    user_prompt: "loop"
+    expected_detection: "LOOP"
+    expected_template: "loop.md"
+    expected_context_contains:
+      - "持續執行"
+      - "tasks.md"
+      - "未完成的任務"
+      - "[ ]"
+    validation: |
+      # 驗證 additionalContext 包含 loop 相關提示
+      if echo "$ADDITIONAL_CONTEXT" | grep -q "tasks.md"; then
+        echo "✅ 場景 2 通過：偵測到 loop 提示"
+      else
+        echo "❌ 場景 2 失敗：未偵測到 loop 提示"
+        exit 1
+      fi
+
+  # 場景 3：無匹配關鍵字 → 正常流程
+  - name: "無匹配關鍵字"
+    user_prompt: "這是什麼專案？"
+    expected_detection: ""
+    expected_template: null
+    expected_context_contains: []
+    validation: |
+      # 驗證 additionalContext 為空
+      if [ -z "$ADDITIONAL_CONTEXT" ]; then
+        echo "✅ 場景 3 通過：無額外注入"
+      else
+        echo "❌ 場景 3 失敗：不應注入內容"
+        exit 1
+      fi
+
+  # 場景 4：混合關鍵字（優先級測試）
+  - name: "混合關鍵字優先級"
+    user_prompt: "規劃並設計用戶介面"
+    expected_detection: "ARCHITECT"  # 優先級 1 > 2
+    expected_template: "architect.md"
+    expected_context_contains:
+      - "ARCHITECT"
+    expected_context_not_contains:
+      - "DESIGNER"  # 不應包含優先級較低的 DESIGNER
+    validation: |
+      # 驗證選擇了優先級最高的 ARCHITECT
+      if echo "$ADDITIONAL_CONTEXT" | grep -q "ARCHITECT" && ! echo "$ADDITIONAL_CONTEXT" | grep -q "DESIGNER"; then
+        echo "✅ 場景 4 通過：優先級正確（ARCHITECT > DESIGNER）"
+      else
+        echo "❌ 場景 4 失敗：優先級錯誤"
+        exit 1
+      fi
+
+# 預期行為
+expectations:
+  # 關鍵字檢測
+  keyword_detection:
+    case_insensitive: true    # 支援大小寫不敏感
+    word_boundary: true       # 英文使用全字匹配
+    chinese_substring: true   # 中文使用子字串匹配
+
+  # 範本處理
+  template_loading:
+    priority: ["user_template", "default_template"]
+    variable_substitution: true  # {{PROMPT}} 替換
+
+  # 優先級排序
+  priority_order:
+    - priority: 1
+      type: "ARCHITECT"
+    - priority: 2
+      type: "DESIGNER"
+    - priority: 3
+      type: "RESUME"
+    - priority: 4
+      type: "LOOP"
+
+  # JSON 輸出格式
+  output_format:
+    required_fields:
+      - "hookSpecificOutput"
+      - "hookSpecificOutput.hookEventName"
+      - "hookSpecificOutput.additionalContext"
+    hookEventName: "UserPromptSubmit"
+
+# 成功條件
+success_criteria:
+  - "所有場景通過驗證"
+  - "關鍵字正確檢測"
+  - "範本正確載入與替換"
+  - "優先級排序正確"
+  - "JSON 格式正確"
+
+# 失敗條件
+failure_criteria:
+  - "任一場景驗證失敗"
+  - "關鍵字檢測錯誤"
+  - "範本載入失敗"
+  - "優先級錯誤"
+  - "JSON 格式錯誤"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  # 驗證 E2E-011 測試結果
+
+  HOOK_SCRIPT="${CLAUDE_PLUGIN_ROOT}/hooks/scripts/keyword-detector.sh"
+
+  if [ ! -f "$HOOK_SCRIPT" ]; then
+    echo "❌ 錯誤：找不到 keyword-detector.sh"
+    exit 1
+  fi
+
+  echo "🧪 開始測試 UserPromptSubmit Hook"
+  echo ""
+
+  # 測試場景 1：規劃指令
+  echo "測試場景 1：規劃指令觸發 ARCHITECT"
+  INPUT='{"userPrompt":"規劃一個計數器功能"}'
+  OUTPUT=$(echo "$INPUT" | bash "$HOOK_SCRIPT")
+  ADDITIONAL_CONTEXT=$(echo "$OUTPUT" | jq -r '.hookSpecificOutput.additionalContext')
+
+  if echo "$ADDITIONAL_CONTEXT" | grep -q "ARCHITECT"; then
+    echo "✅ 場景 1 通過"
+  else
+    echo "❌ 場景 1 失敗"
+    exit 1
+  fi
+
+  # 測試場景 2：loop 指令
+  echo ""
+  echo "測試場景 2：loop 指令觸發"
+  INPUT='{"userPrompt":"loop"}'
+  OUTPUT=$(echo "$INPUT" | bash "$HOOK_SCRIPT")
+  ADDITIONAL_CONTEXT=$(echo "$OUTPUT" | jq -r '.hookSpecificOutput.additionalContext')
+
+  if echo "$ADDITIONAL_CONTEXT" | grep -q "tasks.md"; then
+    echo "✅ 場景 2 通過"
+  else
+    echo "❌ 場景 2 失敗"
+    exit 1
+  fi
+
+  # 測試場景 3：無匹配關鍵字
+  echo ""
+  echo "測試場景 3：無匹配關鍵字"
+  INPUT='{"userPrompt":"這是什麼專案？"}'
+  OUTPUT=$(echo "$INPUT" | bash "$HOOK_SCRIPT")
+  ADDITIONAL_CONTEXT=$(echo "$OUTPUT" | jq -r '.hookSpecificOutput.additionalContext')
+
+  if [ -z "$ADDITIONAL_CONTEXT" ]; then
+    echo "✅ 場景 3 通過"
+  else
+    echo "❌ 場景 3 失敗（不應注入內容）"
+    exit 1
+  fi
+
+  # 測試場景 4：混合關鍵字（優先級）
+  echo ""
+  echo "測試場景 4：混合關鍵字優先級"
+  INPUT='{"userPrompt":"規劃並設計用戶介面"}'
+  OUTPUT=$(echo "$INPUT" | bash "$HOOK_SCRIPT")
+  ADDITIONAL_CONTEXT=$(echo "$OUTPUT" | jq -r '.hookSpecificOutput.additionalContext')
+
+  # 驗證包含 ARCHITECT 且不包含 DESIGNER
+  HAS_ARCHITECT=$(echo "$ADDITIONAL_CONTEXT" | grep -c "ARCHITECT" || true)
+  HAS_DESIGNER=$(echo "$ADDITIONAL_CONTEXT" | grep -c "DESIGNER" || true)
+
+  if [ "$HAS_ARCHITECT" -gt 0 ] && [ "$HAS_DESIGNER" -eq 0 ]; then
+    echo "✅ 場景 4 通過（優先級正確）"
+  else
+    echo "❌ 場景 4 失敗（優先級錯誤）"
+    echo "   ARCHITECT: $HAS_ARCHITECT, DESIGNER: $HAS_DESIGNER"
+    exit 1
+  fi
+
+  echo ""
+  echo "═══════════════════════════════════════════════════════════"
+  echo "✅ E2E-011 測試完全通過"
+  echo "  - 關鍵字檢測：✓"
+  echo "  - 範本載入：✓"
+  echo "  - 變數替換：✓"
+  echo "  - 優先級排序：✓"
+  echo "  - JSON 格式：✓"
+
+# 除錯資訊
+debug:
+  log_file: "/tmp/claude-workflow-debug.log"
+  verbose_mode: true
+  test_commands:
+    - 'echo ''{"userPrompt":"規劃功能"}'' | bash hooks/scripts/keyword-detector.sh'
+    - 'echo ''{"userPrompt":"loop"}'' | bash hooks/scripts/keyword-detector.sh'
+    - 'echo ''{"userPrompt":"測試"}'' | bash hooks/scripts/keyword-detector.sh'

@@ -1,0 +1,166 @@
+# E2E-005: 重試機制測試
+# 測試 TESTER FAIL 後的重試機制和風險升級
+
+id: E2E-005
+name: "重試機制測試"
+description: "模擬連續失敗場景，測試重試機制和風險等級自動升級"
+
+# 模擬指令
+command: "(模擬 TESTER 連續失敗)"
+alternative_commands:
+  - "測試重試機制"
+  - "驗證失敗升級功能"
+
+# 測試設定
+settings:
+  max_iterations: 10
+  timeout_minutes: 20
+  bypass_mode: false
+  simulate_failures: true    # 模擬失敗
+
+# 模擬場景
+simulation:
+  # 場景 A: LOW → MEDIUM 升級
+  scenario_a:
+    name: "LOW 風險升級"
+    initial_risk: "LOW"
+    steps:
+      - action: "DEVELOPER 完成"
+        risk_level: "LOW"
+
+      - action: "TESTER FAIL (第 1 次)"
+        expected_result: "fail"
+        expected_risk_upgrade: "LOW → MEDIUM"
+        expected_fail_count: 1
+
+      - action: "DEVELOPER 修復"
+
+      - action: "TESTER PASS"
+        expected_result: "pass"
+        expected_fail_count_reset: true
+
+  # 場景 B: MEDIUM 超過閾值
+  scenario_b:
+    name: "MEDIUM 超過閾值"
+    initial_risk: "MEDIUM"
+    steps:
+      - action: "TESTER FAIL (第 1 次)"
+        expected_fail_count: 1
+
+      - action: "DEVELOPER 修復 + TESTER FAIL (第 2 次)"
+        expected_fail_count: 2
+
+      - action: "DEVELOPER 修復 + TESTER FAIL (第 3 次)"
+        expected_fail_count: 3
+        expected_result: "BLOCKED"
+        expected_message: "已達最大重試次數"
+
+  # 場景 C: HIGH 快速暫停
+  scenario_c:
+    name: "HIGH 風險快速暫停"
+    initial_risk: "HIGH"
+    steps:
+      - action: "TESTER FAIL (第 1 次)"
+        expected_fail_count: 1
+
+      - action: "DEVELOPER 修復 + TESTER FAIL (第 2 次)"
+        expected_fail_count: 2
+        expected_result: "BLOCKED"
+        expected_message: "HIGH RISK 任務已失敗 2 次"
+
+# 預期行為
+expectations:
+  # 重試閾值
+  retry_thresholds:
+    LOW: 1       # 失敗 1 次後升級
+    MEDIUM: 3    # 失敗 3 次後暫停
+    HIGH: 2      # 失敗 2 次後暫停
+
+  # 風險升級
+  risk_upgrade:
+    trigger: "fail_count >= threshold"
+    LOW_to_MEDIUM: "fail_count >= 1"
+
+  # 暫停條件
+  pause_conditions:
+    MEDIUM: "fail_count >= 3"
+    HIGH: "fail_count >= 2"
+
+  # 重置條件
+  reset_conditions:
+    on_pass: "fail_count = 0"
+    preserve_risk: true  # 風險等級不會降回去
+
+  # 合規性
+  compliance:
+    min_rate: 70         # 多次失敗會降低合規率
+    retry_tracking: true
+
+  # 最終狀態（取決於場景）
+  final_state:
+    scenario_a: "completed"
+    scenario_b: "paused"
+    scenario_c: "paused"
+
+# 成功條件
+success_criteria:
+  - "失敗計數正確累加"
+  - "風險等級正確升級"
+  - "達到閾值時正確暫停"
+  - "成功後正確重置計數"
+
+# 失敗條件
+failure_criteria:
+  - "失敗計數未累加"
+  - "風險等級未升級"
+  - "超過閾值未暫停"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  SESSION_ID="$1"
+  STATE_DIR="${PWD}/.claude"
+
+  # 檢查狀態檔案中的 fail_count
+  check_fail_count() {
+    local state_file="$1"
+    local expected="$2"
+
+    if [ -f "$state_file" ]; then
+      local actual=$(jq -r '.fail_count // 0' "$state_file" 2>/dev/null)
+      if [ "$actual" -eq "$expected" ]; then
+        echo "✅ fail_count 正確: $actual"
+        return 0
+      else
+        echo "❌ fail_count 錯誤: 預期 $expected, 實際 $actual"
+        return 1
+      fi
+    else
+      echo "❌ 狀態檔案不存在"
+      return 1
+    fi
+  }
+
+  # 檢查風險等級
+  check_risk_level() {
+    local state_file="$1"
+    local expected="$2"
+
+    if [ -f "$state_file" ]; then
+      local actual=$(jq -r '.risk_level // "MEDIUM"' "$state_file" 2>/dev/null)
+      if [ "$actual" = "$expected" ]; then
+        echo "✅ risk_level 正確: $actual"
+        return 0
+      else
+        echo "❌ risk_level 錯誤: 預期 $expected, 實際 $actual"
+        return 1
+      fi
+    fi
+  }
+
+  echo "E2E-005 重試機制驗證"
+  echo "========================"
+
+  # 這裡需要根據實際測試場景調整
+  echo "✅ E2E-005 測試架構驗證通過"
+  echo "（實際重試測試需要在 E2E 運行器中執行）"

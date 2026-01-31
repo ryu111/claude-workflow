@@ -1,0 +1,127 @@
+# E2E-004: 違規檢測與修復
+# 測試故意違規場景下的阻擋和修復流程
+
+id: E2E-004
+name: "違規檢測與修復"
+description: "模擬流程違規場景，測試阻擋機制和修復閉環"
+
+# 模擬指令
+command: "(模擬跳過 REVIEWER 直接 TESTER)"
+alternative_commands:
+  - "測試違規檢測機制"
+  - "驗證 D→R→T 阻擋功能"
+
+# 測試設定
+settings:
+  max_iterations: 6
+  timeout_minutes: 15
+  bypass_mode: false
+  simulate_violation: true   # 模擬違規
+
+# 模擬場景
+simulation:
+  steps:
+    - step: 1
+      action: "DEVELOPER 完成實作"
+      expected_state: "developer:complete"
+
+    - step: 2
+      action: "嘗試直接啟動 TESTER（跳過 REVIEWER）"
+      expected_result: "BLOCKED"
+      expected_message: "跳過 REVIEWER 審查"
+
+    - step: 3
+      action: "修復：啟動 REVIEWER"
+      expected_state: "reviewer:approve"
+
+    - step: 4
+      action: "重新啟動 TESTER"
+      expected_result: "ALLOWED"
+      expected_state: "tester:pass"
+
+# 預期行為
+expectations:
+  # 違規檢測
+  violation_detection:
+    triggers:
+      - "DEVELOPER 後直接 TESTER"
+      - "無 REVIEWER 狀態時啟動 TESTER"
+
+    response:
+      decision: "block"
+      reason_contains: "跳過 REVIEWER"
+      user_message: "請先委派 REVIEWER 審查程式碼"
+
+  # 修復流程
+  fix_flow:
+    - step: "記錄違規"
+      action: "violation-collector 記錄事件"
+
+    - step: "觸發修復"
+      action: "提示用戶正確流程"
+
+    - step: "執行修復"
+      action: "用戶啟動 REVIEWER"
+
+    - step: "重新驗證"
+      action: "REVIEWER APPROVE 後可啟動 TESTER"
+
+    - step: "記錄修復"
+      action: "violation-collector 記錄修復完成"
+
+  # 合規性
+  compliance:
+    initial_violations: 1    # 預期有 1 次違規
+    final_violations: 0      # 最終應全部修復
+    min_rate: 80             # 因有故意違規，合規率可能較低
+    fixed_rate: 100          # 但修復率應為 100%
+
+  # 最終狀態
+  final_state:
+    violation_fixed: true
+    flow_corrected: true
+    task_completed: true
+
+# 成功條件
+success_criteria:
+  - "違規被正確阻擋"
+  - "阻擋訊息清楚說明原因"
+  - "修復後可繼續執行"
+  - "違規記錄完整"
+
+# 失敗條件
+failure_criteria:
+  - "違規未被阻擋"
+  - "阻擋後無法修復"
+  - "違規記錄缺失"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  SESSION_ID="$1"
+  STATS_FILE="/tmp/claude-e2e-stats-${SESSION_ID}.jsonl"
+
+  # 檢查是否有違規記錄
+  VIOLATIONS=$(grep -c '"type":"violation"' "$STATS_FILE" 2>/dev/null || echo 0)
+  if [ "$VIOLATIONS" -gt 0 ]; then
+    echo "✅ 違規被記錄: $VIOLATIONS 次"
+  else
+    echo "❌ 未記錄違規"
+    exit 1
+  fi
+
+  # 檢查是否有修復記錄
+  FIXES=$(grep -c '"type":"fix"' "$STATS_FILE" 2>/dev/null || echo 0)
+  if [ "$FIXES" -gt 0 ]; then
+    echo "✅ 修復被記錄: $FIXES 次"
+  else
+    echo "⚠️ 未記錄修復（可能違規後直接中止）"
+  fi
+
+  # 檢查阻擋決策
+  BLOCKS=$(grep -c '"decision":"block"' "$STATS_FILE" 2>/dev/null || echo 0)
+  if [ "$BLOCKS" -gt 0 ]; then
+    echo "✅ 阻擋決策記錄: $BLOCKS 次"
+  fi
+
+  echo "✅ E2E-004 測試通過"

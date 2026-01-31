@@ -1,0 +1,255 @@
+# E2E 測試功能檢查清單
+# 每個任務執行前/後都要對照此清單驗證，確保合規率 >= 90%
+#
+# 自動化程度標記:
+#   - auto: 可完全自動化驗證
+#   - semi: 需要部分人工判斷
+#   - manual: 需要完全人工驗證
+
+version: "1.0"
+compliance_threshold: 90  # 合規率閾值（百分比）
+max_iterations: 10        # 最大閉環迭代次數
+
+categories:
+  # ═══════════════════════════════════════════════════════════════
+  # A. 流程合規檢查
+  # ═══════════════════════════════════════════════════════════════
+  A_flow_compliance:
+    name: "流程合規檢查"
+    description: "驗證 D→R→T 流程正確執行"
+    checks:
+      A1_drt_order:
+        name: "D→R→T 順序正確"
+        description: "狀態檔案時間戳順序符合 Developer → Reviewer → Tester"
+        automation: auto
+        validation_method: "state_file_timestamps"
+        pass_condition: "no block decisions with '跳過 REVIEWER'"
+
+      A2_no_skip_reviewer:
+        name: "無跳過 REVIEWER（MEDIUM/HIGH）"
+        description: "MEDIUM 或 HIGH 風險任務必須經過 REVIEWER"
+        automation: auto
+        validation_method: "workflow_gate_output"
+        pass_condition: "zero violations for MEDIUM/HIGH risk"
+
+      A3_low_risk_fast_track:
+        name: "LOW 風險可跳過 REVIEWER"
+        description: "檢查 LOW 風險任務的 D→T 快速通道是否正常運作"
+        automation: auto
+        validation_method: "workflow_gate_output"
+        pass_condition: "LOW risk tasks allowed without reviewer"
+
+      A4_reviewer_verdict:
+        name: "REVIEWER 有明確判定"
+        description: "REVIEWER 輸出必須包含 APPROVE 或 REJECT"
+        automation: auto
+        validation_method: "subagent_validator_output"
+        pass_condition: "output contains 'APPROVED' or 'REJECT'"
+
+      A5_tester_result:
+        name: "TESTER 有明確結果"
+        description: "TESTER 輸出必須包含 PASS 或 FAIL"
+        automation: auto
+        validation_method: "subagent_validator_output"
+        pass_condition: "output contains 'PASS' or 'FAIL'"
+
+      A6_high_risk_confirmation:
+        name: "HIGH RISK 有人工確認"
+        description: "HIGH 風險任務完成後需要人工確認"
+        automation: auto
+        validation_method: "state_file"
+        pass_condition: "status is 'pending_confirmation' for HIGH risk PASS"
+
+  # ═══════════════════════════════════════════════════════════════
+  # B. 風險判定檢查
+  # ═══════════════════════════════════════════════════════════════
+  B_risk_detection:
+    name: "風險判定檢查"
+    description: "驗證風險等級判定準確性"
+    checks:
+      B1_sensitive_paths:
+        name: "敏感路徑識別"
+        description: "識別 auth/security/payment 等敏感路徑"
+        automation: auto
+        validation_method: "detect_risk_level"
+        pass_condition: "paths matching HIGH_RISK_PATHS return HIGH"
+        test_cases:
+          - input: "/src/auth/login.ts"
+            expected: "HIGH"
+          - input: "/src/security/crypto.ts"
+            expected: "HIGH"
+          - input: "/src/payment/checkout.ts"
+            expected: "HIGH"
+
+      B2_sensitive_files:
+        name: "敏感檔案識別"
+        description: "識別 .env/Dockerfile 等敏感檔案"
+        automation: auto
+        validation_method: "detect_risk_level"
+        pass_condition: "files matching HIGH_RISK_FILES return HIGH"
+        test_cases:
+          - input: "Dockerfile"
+            expected: "HIGH"
+          - input: ".env.production"
+            expected: "HIGH"
+          - input: "schema.prisma"
+            expected: "HIGH"
+
+      B3_multi_file_threshold:
+        name: "多檔案閾值（>5 → HIGH）"
+        description: "超過 5 個檔案的變更判定為 HIGH 風險"
+        automation: auto
+        validation_method: "detect_risk_level"
+        pass_condition: "file_count > 5 returns HIGH"
+
+      B4_cicd_detection:
+        name: "CI/CD 檔案識別"
+        description: "識別 GitHub Actions/GitLab CI 等 CI/CD 檔案"
+        automation: auto
+        validation_method: "detect_risk_level"
+        pass_condition: "CI/CD files return HIGH"
+        test_cases:
+          - input: ".github/workflows/ci.yml"
+            expected: "HIGH"
+          - input: ".gitlab-ci.yml"
+            expected: "HIGH"
+          - input: "Jenkinsfile"
+            expected: "HIGH"
+
+      B5_low_risk_docs:
+        name: "純文檔判定為 LOW"
+        description: "只包含 .md/.txt 等檔案判定為 LOW 風險"
+        automation: auto
+        validation_method: "detect_risk_level"
+        pass_condition: "doc-only changes return LOW"
+        test_cases:
+          - input: "README.md"
+            expected: "LOW"
+          - input: "docs/guide.txt"
+            expected: "LOW"
+
+  # ═══════════════════════════════════════════════════════════════
+  # C. 重試機制檢查
+  # ═══════════════════════════════════════════════════════════════
+  C_retry_mechanism:
+    name: "重試機制檢查"
+    description: "驗證失敗重試和風險升級機制"
+    checks:
+      C1_low_upgrade:
+        name: "LOW 失敗 1 次 → MEDIUM"
+        description: "LOW 風險失敗後升級為 MEDIUM"
+        automation: auto
+        validation_method: "state_file"
+        pass_condition: "risk_level changes from LOW to MEDIUM after 1 fail"
+
+      C2_medium_pause:
+        name: "MEDIUM 失敗 3 次 → 暫停"
+        description: "MEDIUM 風險失敗 3 次後暫停自動流程"
+        automation: auto
+        validation_method: "workflow_gate_output"
+        pass_condition: "block decision after 3 MEDIUM fails"
+
+      C3_high_pause:
+        name: "HIGH 失敗 2 次 → 暫停"
+        description: "HIGH 風險失敗 2 次後暫停自動流程"
+        automation: auto
+        validation_method: "workflow_gate_output"
+        pass_condition: "block decision after 2 HIGH fails"
+
+      C4_reset_on_success:
+        name: "成功後重置失敗計數"
+        description: "測試通過後 fail_count 重置為 0"
+        automation: auto
+        validation_method: "state_file"
+        pass_condition: "fail_count = 0 after PASS"
+
+  # ═══════════════════════════════════════════════════════════════
+  # D. 狀態管理檢查
+  # ═══════════════════════════════════════════════════════════════
+  D_state_management:
+    name: "狀態管理檢查"
+    description: "驗證狀態檔案管理正確性"
+    checks:
+      D1_state_format:
+        name: "狀態檔案格式正確"
+        description: "狀態檔案為有效 JSON 格式"
+        automation: auto
+        validation_method: "json_validation"
+        pass_condition: "jq parses without error"
+
+      D2_change_id_isolation:
+        name: "Change ID 隔離正確"
+        description: "不同 Change ID 使用獨立狀態檔案"
+        automation: auto
+        validation_method: "file_isolation"
+        pass_condition: "separate state files per change_id"
+
+      D3_state_expiry:
+        name: "30 分鐘過期機制"
+        description: "狀態檔案超過 30 分鐘自動過期"
+        automation: auto
+        validation_method: "timestamp_check"
+        pass_condition: "STATE_VALID = false for old timestamps"
+
+      D4_cleanup_on_complete:
+        name: "任務完成後清理狀態"
+        description: "TESTER PASS 後刪除狀態檔案"
+        automation: auto
+        validation_method: "file_existence"
+        pass_condition: "state file deleted after PASS"
+
+  # ═══════════════════════════════════════════════════════════════
+  # E. Agent 輸出檢查
+  # ═══════════════════════════════════════════════════════════════
+  E_agent_output:
+    name: "Agent 輸出檢查"
+    description: "驗證各 Agent 輸出符合預期格式"
+    checks:
+      E1_developer_summary:
+        name: "DEVELOPER 有變更摘要"
+        description: "DEVELOPER 輸出包含修改檔案或變更說明"
+        automation: auto
+        validation_method: "output_keywords"
+        pass_condition: "output contains '修改檔案' or 'implemented'"
+
+      E2_reviewer_verdict:
+        name: "REVIEWER 有判定理由"
+        description: "REVIEWER 輸出包含審查結果和理由"
+        automation: semi
+        validation_method: "output_structure"
+        pass_condition: "output has verdict and reasoning"
+        note: "理由品質需人工判斷"
+
+      E3_tester_report:
+        name: "TESTER 有測試報告"
+        description: "TESTER 輸出包含 PASS/FAIL 和測試結果"
+        automation: auto
+        validation_method: "output_keywords"
+        pass_condition: "output contains 'PASS' or 'FAIL'"
+
+      E4_debugger_solution:
+        name: "DEBUGGER 有修復方案"
+        description: "DEBUGGER 輸出包含問題分析和修復建議"
+        automation: auto
+        validation_method: "output_keywords"
+        pass_condition: "output contains '修復' or 'solution'"
+
+# ═══════════════════════════════════════════════════════════════
+# 閉環退出條件
+# ═══════════════════════════════════════════════════════════════
+exit_conditions:
+  formula: "(compliance_rate >= threshold) AND (pending_tasks == 0)"
+  description: "合規率達標且所有任務完成時退出閉環"
+
+  on_not_met:
+    compliance_low:
+      action: "continue_fixing"
+      description: "合規率未達標，繼續修復迭代"
+
+    tasks_pending:
+      action: "continue_execution"
+      description: "還有待處理任務，繼續執行"
+
+    max_iterations_reached:
+      action: "pause_and_notify"
+      description: "達到最大迭代次數，暫停並通知人工介入"

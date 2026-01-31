@@ -133,7 +133,7 @@ case "$EXTENSION" in
 esac
 
 # 檢查 TODO/FIXME 標記
-TODO_COUNT=$(grep -ciE "TODO|FIXME|XXX|HACK" "$FILE_PATH" 2>/dev/null || echo 0)
+TODO_COUNT=$(grep -ciE "TODO|FIXME|XXX|HACK" "$FILE_PATH" 2>/dev/null | head -1 | tr -d '\n\r ' || echo "0")
 if [ "$TODO_COUNT" -gt 0 ]; then
     WARNINGS="${WARNINGS}📝 檔案中有 $TODO_COUNT 個 TODO/FIXME 標記\n"
 fi

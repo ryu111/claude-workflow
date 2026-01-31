@@ -1,0 +1,110 @@
+# E2E-003: 多任務並行開發
+# 測試多個任務並行執行時的 Change ID 隔離
+
+id: E2E-003
+name: "多任務並行開發"
+description: "測試並行執行多個任務時的狀態隔離和流程控制"
+
+# 模擬指令
+command: "規劃 Dashboard 並設計 5 種 UI 風格 loop"
+alternative_commands:
+  - "規劃 Dashboard 功能，包含多個並行任務 loop"
+  - "建立儀表板系統，多個組件並行開發 loop"
+
+# 測試設定
+settings:
+  max_iterations: 15         # 多任務可能需要更多迭代
+  timeout_minutes: 30
+  bypass_mode: false
+  parallel_enabled: true     # 啟用並行執行
+
+# 預期行為
+expectations:
+  # 任務結構
+  task_structure:
+    phases:
+      - name: "Foundation"
+        type: "sequential"
+        tasks:
+          - "建立專案結構"
+          - "設定基礎配置"
+
+      - name: "UI Components"
+        type: "parallel"
+        tasks:
+          - "設計風格 A"
+          - "設計風格 B"
+          - "設計風格 C"
+          - "設計風格 D"
+          - "設計風格 E"
+
+      - name: "Integration"
+        type: "sequential"
+        tasks:
+          - "整合所有風格"
+          - "最終測試"
+
+  # 並行隔離
+  parallel_isolation:
+    enabled: true
+    requirements:
+      - "每個並行任務使用獨立 Change ID"
+      - "狀態檔案不互相影響"
+      - "可同時進行多個 D→R→T 流程"
+
+  # 流程
+  flow_per_task:
+    - agent: developer
+      action: "實作單一組件"
+
+    - agent: reviewer
+      action: "審查單一組件"
+
+    - agent: tester
+      action: "測試單一組件"
+
+  # 風險等級（多為 MEDIUM 或 LOW）
+  risk_level:
+    expected: "MEDIUM"
+    per_task_variation: true  # 每個任務可能不同
+
+  # 合規性
+  compliance:
+    min_rate: 90
+    max_violations: 3        # 多任務允許稍多違規
+    violations_must_fix: true
+
+  # 最終狀態
+  final_state:
+    all_tasks_completed: true
+    all_change_ids_resolved: true
+    state_files_cleaned: true
+
+# 成功條件
+success_criteria:
+  - "所有 5 個並行任務完成"
+  - "合規率 >= 90%"
+  - "Change ID 正確隔離"
+  - "無狀態互相干擾"
+
+# 失敗條件
+failure_criteria:
+  - "並行任務狀態混淆"
+  - "Change ID 衝突"
+  - "合規率 < 90%"
+
+# 特殊測試點
+special_tests:
+  - name: "Change ID 隔離"
+    description: "確認不同 Change ID 使用獨立狀態檔案"
+    check: "ls .claude/.drt-state-* | wc -l"
+    expected: "5 個狀態檔案（並行任務數）"
+
+  - name: "並行執行不阻擋"
+    description: "確認一個任務的狀態不影響另一個任務"
+    scenario: "任務 A 在 REVIEWER 階段，任務 B 可以啟動 DEVELOPER"
+
+  - name: "最終清理"
+    description: "所有任務完成後狀態檔案被清理"
+    check: "ls .claude/.drt-state-* 2>/dev/null | wc -l"
+    expected: "0（全部清理）"

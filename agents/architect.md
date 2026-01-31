@@ -81,7 +81,25 @@ openspec/specs/[change-id]/
 └── notes.md       # 備註：風險、待確認事項
 ```
 
-## tasks.md 格式
+## tasks.md 格式規範（強制）
+
+**⚠️ 必須標記每個 Phase 的執行模式：**
+
+- `(parallel)` - 任務可並行執行
+- `(sequential)` - 任務需依序執行
+- `(sequential, depends: N)` - 依賴 Phase N 完成
+
+**判斷原則：**
+```
+任務間有依賴關係？
+  ├─ 是 → (sequential)
+  └─ 否 → (parallel)
+
+需要等待其他 Phase？
+  └─ 是 → (sequential, depends: 1, 2)
+```
+
+**標準範本：**
 
 ```markdown
 ## Progress
@@ -92,16 +110,22 @@ openspec/specs/[change-id]/
 
 ---
 
-## 1. [Phase 名稱] (sequential|parallel)
+## 1. [基礎設施] (sequential)
 
-- [ ] 1.1 [任務名稱] | agent: developer | files: src/xxx.ts
-- [ ] 1.2 [任務名稱] | agent: developer | files: src/yyy.ts
+- [ ] 1.1 [建立專案結構] | agent: developer | files: src/index.ts
+- [ ] 1.2 [設定配置檔] | agent: developer | files: config/app.ts
 
-## 2. [Phase 名稱] (parallel)
+## 2. [核心功能] (parallel)
 
-- [ ] 2.1 [任務名稱] | agent: developer | files: src/aaa.ts
-- [ ] 2.2 [任務名稱] | agent: developer | files: src/bbb.ts
+- [ ] 2.1 [功能 A] | agent: developer | files: src/feature-a.ts
+- [ ] 2.2 [功能 B] | agent: developer | files: src/feature-b.ts
+
+## 3. [整合測試] (sequential, depends: 1, 2)
+
+- [ ] 3.1 [執行測試] | agent: tester | files: tests/integration.test.ts
 ```
+
+**❌ 禁止省略執行模式標記**
 
 ## 輸出格式
 

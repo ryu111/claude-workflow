@@ -1,0 +1,113 @@
+# E2E-002: 高風險功能開發
+# 測試 HIGH 風險場景下的深度審查和人工確認流程
+
+id: E2E-002
+name: "高風險功能開發"
+description: "測試涉及認證、安全等高風險區域的開發流程"
+
+# 模擬指令
+command: "規劃 用戶認證 API loop"
+alternative_commands:
+  - "開發用戶登入認證 API 並持續執行"
+  - "實作 JWT 認證系統 loop"
+
+# 測試設定
+settings:
+  max_iterations: 8          # HIGH 風險可能需要更多迭代
+  timeout_minutes: 20
+  bypass_mode: false
+  risk_override: null        # 讓系統自動判定為 HIGH
+
+# 預期行為
+expectations:
+  # 流程順序
+  flow:
+    - agent: architect
+      action: "規劃認證系統架構"
+      optional: false
+      expected_output_contains:
+        - "架構"
+        - "認證"
+        - "安全"
+
+    - agent: developer
+      action: "實作認證 API"
+      expected_output_contains:
+        - "auth"
+        - "token"
+        - "修改檔案"
+
+    - agent: reviewer
+      action: "深度審查（HIGH RISK）"
+      expected_verdict: "APPROVE"
+      review_depth: "deep"  # HIGH 風險使用深度審查
+      expected_checks:
+        - "安全性檢查"
+        - "輸入驗證"
+        - "錯誤處理"
+
+    - agent: tester
+      action: "完整測試"
+      expected_result: "PASS"
+      test_coverage: "comprehensive"
+
+    - action: "人工確認"
+      type: "manual_confirmation"
+      required: true
+      confirmation_checklist:
+        - "安全性影響已評估"
+        - "效能影響已評估"
+        - "向後相容性已確認"
+        - "回滾計劃已準備"
+
+  # 風險等級
+  risk_level:
+    expected: "HIGH"
+    triggers:
+      - "路徑包含 /auth/"
+      - "涉及 token/password"
+      - "敏感關鍵字"
+
+  # 合規性
+  compliance:
+    min_rate: 90
+    max_violations: 2
+    violations_must_fix: true
+    require_human_confirmation: true
+
+  # 最終狀態
+  final_state:
+    all_tasks_completed: true
+    human_confirmed: true  # HIGH RISK 需要人工確認
+    state_files_cleaned: true
+
+# 成功條件
+success_criteria:
+  - "所有任務完成"
+  - "合規率 >= 90%"
+  - "風險判定為 HIGH"
+  - "REVIEWER 進行深度審查"
+  - "人工確認完成"
+
+# 失敗條件
+failure_criteria:
+  - "風險未判定為 HIGH"
+  - "跳過人工確認"
+  - "合規率 < 90%"
+  - "安全檢查未執行"
+
+# 特殊測試點
+special_tests:
+  - name: "敏感路徑檢測"
+    description: "確認 /auth/ 路徑被識別為 HIGH RISK"
+    input: "/src/auth/jwt.ts"
+    expected_risk: "HIGH"
+
+  - name: "敏感關鍵字檢測"
+    description: "確認 password/token 被識別為 HIGH RISK"
+    input: "處理 password 和 token 的邏輯"
+    expected_risk: "HIGH"
+
+  - name: "人工確認步驟"
+    description: "確認 HIGH RISK PASS 後進入 pending_confirmation"
+    expected_state: "pending_confirmation"

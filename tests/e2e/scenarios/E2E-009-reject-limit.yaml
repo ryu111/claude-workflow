@@ -1,0 +1,197 @@
+# E2E-009: REJECT 迴圈限制測試
+# 測試 REVIEWER 連續 REJECT 達 5 次後的 escalated 狀態阻擋機制
+
+id: E2E-009
+name: "REJECT 迴圈限制測試"
+description: "驗證連續 5 次 REJECT 後進入 escalated 狀態，阻擋繼續執行"
+
+# 模擬指令
+command: "規劃 複雜加密算法 loop"
+alternative_commands:
+  - "建立自定義加密算法"
+  - "/plan 實作加密算法"
+
+# 測試設定
+settings:
+  max_iterations: 20
+  timeout_minutes: 30
+  bypass_mode: false
+  risk_override: "HIGH"
+  force_reviewer_reject: true  # 強制 REVIEWER 前 5 次 REJECT
+  reject_count: 5  # REJECT 次數
+
+# 預期行為
+expectations:
+  # 流程順序
+  flow:
+    - agent: developer
+      iteration: 1
+      action: "實作加密算法（第 1 版）"
+      expected_output_contains:
+        - "加密"
+
+    - agent: reviewer
+      iteration: 1
+      action: "審查（第 1 次 REJECT）"
+      expected_verdict: "REJECT"
+      expected_reason: "測試用 REJECT"
+
+    - agent: developer
+      iteration: 2
+      action: "修正後重新實作（第 2 版）"
+
+    - agent: reviewer
+      iteration: 2
+      action: "審查（第 2 次 REJECT）"
+      expected_verdict: "REJECT"
+
+    - agent: developer
+      iteration: 3
+      action: "再次修正（第 3 版）"
+
+    - agent: reviewer
+      iteration: 3
+      action: "審查（第 3 次 REJECT）"
+      expected_verdict: "REJECT"
+
+    - agent: developer
+      iteration: 4
+      action: "持續修正（第 4 版）"
+
+    - agent: reviewer
+      iteration: 4
+      action: "審查（第 4 次 REJECT）"
+      expected_verdict: "REJECT"
+
+    - agent: developer
+      iteration: 5
+      action: "最後修正（第 5 版）"
+
+    - agent: reviewer
+      iteration: 5
+      action: "審查（第 5 次 REJECT，觸發 escalated）"
+      expected_verdict: "REJECT"
+      expected_state_change: "escalated"
+
+    - agent: developer
+      iteration: 6
+      action: "嘗試繼續實作（應被阻擋）"
+      expected_result: "BLOCKED"
+      expected_error_contains:
+        - "escalated"
+        - "5 consecutive REJECT"
+        - "manual intervention required"
+
+  # REJECT 限制規則
+  reject_limit_rules:
+    max_consecutive_rejects: 5
+    escalation_trigger: 5
+    escalated_state_blocks:
+      - "DEVELOPER"
+      - "REVIEWER"
+      - "TESTER"
+    requires_manual_intervention: true
+    intervention_methods:
+      - "bypass mode"
+      - "reset reject counter"
+      - "manual approval"
+
+  # 合規性
+  compliance:
+    min_rate: 85  # 較低，因為有多次 REJECT
+    max_violations: 2
+    violations_must_fix: false  # escalated 後不需修復
+
+  # 最終狀態
+  final_state:
+    state: "escalated"
+    reject_count: 5
+    manual_intervention_required: true
+    workflow_blocked: true
+
+# 成功條件
+success_criteria:
+  - "第 5 次 REJECT 後狀態變為 escalated"
+  - "escalated 後 DEVELOPER 被阻擋"
+  - "錯誤訊息清楚說明需人工介入"
+  - "reject_count 正確累計到 5"
+  - "合規率 >= 85%"
+
+# 失敗條件
+failure_criteria:
+  - "超過 5 次 REJECT 仍未 escalate"
+  - "escalated 後仍可繼續執行"
+  - "reject_count 累計錯誤"
+  - "未提示人工介入"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  # 驗證 E2E-009 測試結果
+
+  SESSION_ID="$1"
+  CHANGE_DIR="openspec/changes"
+  LOG_FILE=".claude/logs/session-${SESSION_ID}.log"
+
+  # 1. 檢查 REJECT 次數
+  echo "檢查 REJECT 次數..."
+  REJECT_COUNT=$(grep -c "REJECT" "$LOG_FILE")
+  if [ "$REJECT_COUNT" -ge 5 ]; then
+    echo "✅ 發現 $REJECT_COUNT 次 REJECT"
+  else
+    echo "❌ REJECT 次數不足: $REJECT_COUNT"
+    exit 1
+  fi
+
+  # 2. 檢查 escalated 狀態
+  echo "檢查 escalated 狀態..."
+  STATE_FILE=$(find "$CHANGE_DIR" -name "*.state.json" | head -1)
+  if [ -f "$STATE_FILE" ]; then
+    STATE=$(jq -r '.state' "$STATE_FILE")
+    if [ "$STATE" = "escalated" ]; then
+      echo "✅ 狀態正確設為 escalated"
+    else
+      echo "❌ 狀態錯誤: $STATE"
+      exit 1
+    fi
+  else
+    echo "❌ 未找到狀態檔案"
+    exit 1
+  fi
+
+  # 3. 檢查 reject_count
+  echo "檢查 reject_count..."
+  REJECT_CNT=$(jq -r '.metadata.reject_count // 0' "$STATE_FILE")
+  if [ "$REJECT_CNT" -ge 5 ]; then
+    echo "✅ reject_count 正確: $REJECT_CNT"
+  else
+    echo "❌ reject_count 錯誤: $REJECT_CNT"
+    exit 1
+  fi
+
+  # 4. 檢查阻擋訊息
+  echo "檢查阻擋訊息..."
+  if grep -q "escalated" "$LOG_FILE" && grep -q "manual intervention" "$LOG_FILE"; then
+    echo "✅ 正確提示需人工介入"
+  else
+    echo "❌ 未發現人工介入提示"
+    exit 1
+  fi
+
+  # 5. 檢查 BLOCKED 記錄
+  echo "檢查 BLOCKED 記錄..."
+  if grep -q "BLOCKED.*escalated" "$LOG_FILE"; then
+    echo "✅ DEVELOPER 被正確阻擋"
+  else
+    echo "⚠️  未明確記錄阻擋"
+  fi
+
+  # 6. 驗證 5 次限制規則
+  echo "檢查 5 次限制規則..."
+  if grep -q "5.*REJECT\|REJECT.*5" "$LOG_FILE"; then
+    echo "✅ 正確提示 5 次限制"
+  else
+    echo "⚠️  未明確提示 5 次限制"
+  fi
+
+  echo "✅ E2E-009 測試通過"

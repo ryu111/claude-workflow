@@ -43,9 +43,21 @@ openspec/
     └── [change-id]/
 ```
 
-## tasks.md 格式
+## tasks.md 格式規範（強制）
+
+**⚠️ 強制要求：每個 Phase 必須標記執行模式**
 
 詳細語法見 [tasks-syntax.md](references/tasks-syntax.md)。
+
+### 執行模式標記
+
+| 標記 | 說明 | 使用時機 |
+|------|------|----------|
+| `(parallel)` | 任務間無依賴，可並行執行 | 獨立功能、可同時開發的模組 |
+| `(sequential)` | 任務間有依賴，需串行執行 | 有順序要求、後續依賴前面結果 |
+| `(sequential, depends: N)` | 依賴特定 Phase 完成 | 需等待其他 Phase 完成才能開始 |
+
+### 標準範本
 
 ```markdown
 ## Progress
@@ -63,9 +75,21 @@ openspec/
 - [ ] 2.1 獨立任務 A | agent: developer | files: src/a.ts
 - [ ] 2.2 獨立任務 B | agent: developer | files: src/b.ts
 
-## 3. Integration (sequential, depends: 2)
+## 3. Integration (sequential, depends: 1, 2)
 - [ ] 3.1 整合任務 | agent: developer | files: src/index.ts
 ```
+
+### 判斷原則
+
+```
+是否有明確順序？
+  ├─ 是 → (sequential)
+  └─ 否 → 是否需要等待其他 Phase？
+            ├─ 是 → (sequential, depends: N)
+            └─ 否 → (parallel)
+```
+
+**❌ 禁止**：省略執行模式標記（會導致並行執行邏輯無法運作）
 
 ## Phase 類型
 

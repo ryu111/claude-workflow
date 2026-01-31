@@ -2,18 +2,16 @@
 # validate-hooks.sh - 驗證 Hooks 配置
 # 功能: 檢查 hooks.json 和所有腳本檔案
 
-# 取得腳本所在目錄
+set -e
+
+# 載入共用函式庫
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/validate-utils.sh"
+
+# 計算路徑
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 HOOKS_DIR="$PLUGIN_DIR/hooks"
 HOOKS_JSON="$HOOKS_DIR/hooks.json"
-
-# 顏色定義
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
 
 # 計數器
 TOTAL_HOOKS=0
@@ -21,16 +19,12 @@ VALID_HOOKS=0
 ERRORS=0
 WARNINGS=0
 
-echo ""
-echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║              🔍 Hooks 配置驗證                                  ║"
-echo "╚════════════════════════════════════════════════════════════════╝"
-echo ""
+print_header "🔍 Hooks 配置驗證"
 
 # 1. 檢查 hooks.json 是否存在
-echo "📋 檢查 hooks.json..."
-if [ ! -f "$HOOKS_JSON" ]; then
-    echo -e "   ${RED}✗${NC} hooks.json 不存在: $HOOKS_JSON"
+log_info "檢查 hooks.json..."
+if ! check_file_exists "$HOOKS_JSON"; then
+    log_fail "hooks.json 不存在: $HOOKS_JSON"
     ERRORS=$((ERRORS + 1))
     echo ""
     echo "╔════════════════════════════════════════════════════════════════╗"
@@ -38,13 +32,13 @@ if [ ! -f "$HOOKS_JSON" ]; then
     echo "╚════════════════════════════════════════════════════════════════╝"
     exit 1
 fi
-echo -e "   ${GREEN}✓${NC} hooks.json 存在"
+log_pass "hooks.json 存在"
 
 # 2. 驗證 JSON 語法
 echo ""
-echo "📋 驗證 JSON 語法..."
+log_info "驗證 JSON 語法..."
 if ! jq empty "$HOOKS_JSON" 2>/dev/null; then
-    echo -e "   ${RED}✗${NC} JSON 語法錯誤"
+    log_fail "JSON 語法錯誤"
     ERRORS=$((ERRORS + 1))
     echo ""
     echo "╔════════════════════════════════════════════════════════════════╗"
@@ -52,11 +46,11 @@ if ! jq empty "$HOOKS_JSON" 2>/dev/null; then
     echo "╚════════════════════════════════════════════════════════════════╝"
     exit 1
 fi
-echo -e "   ${GREEN}✓${NC} JSON 語法正確"
+log_pass "JSON 語法正確"
 
 # 3. 檢查每個 Hook 事件
 echo ""
-echo "📋 檢查 Hook 事件..."
+log_info "檢查 Hook 事件..."
 
 # 支援的事件類型
 SUPPORTED_EVENTS="SessionStart PreToolUse PostToolUse SubagentStop Stop PreCompact SessionEnd Notification UserPromptSubmit"
@@ -81,7 +75,7 @@ for EVENT in $EVENTS; do
 
     # 檢查是否為支援的事件類型
     if ! echo "$SUPPORTED_EVENTS" | grep -qw "$EVENT"; then
-        echo -e "      ${YELLOW}⚠${NC} 未知的事件類型"
+        log_warn "未知的事件類型"
         WARNINGS=$((WARNINGS + 1))
     fi
 
@@ -124,9 +118,9 @@ for EVENT in $EVENTS; do
                 SCRIPT_PATH=$(echo "$COMMAND" | sed 's/bash //' | sed "s|\${CLAUDE_PLUGIN_ROOT}|$PLUGIN_DIR|g")
 
                 # 檢查腳本是否存在
-                if [ -f "$SCRIPT_PATH" ]; then
+                if check_file_exists "$SCRIPT_PATH"; then
                     # 檢查是否有執行權限
-                    if [ -x "$SCRIPT_PATH" ]; then
+                    if check_file_executable "$SCRIPT_PATH"; then
                         echo -e "         ${GREEN}✓${NC} 腳本存在且可執行"
                         VALID_HOOKS=$((VALID_HOOKS + 1))
                     else
@@ -151,11 +145,11 @@ done
 
 # 4. 列出腳本目錄中的所有腳本
 echo ""
-echo "📋 檢查腳本目錄..."
+log_info "檢查腳本目錄..."
 SCRIPTS_DIR="$HOOKS_DIR/scripts"
 
-if [ -d "$SCRIPTS_DIR" ]; then
-    echo -e "   ${GREEN}✓${NC} 腳本目錄存在: $SCRIPTS_DIR"
+if check_dir_exists "$SCRIPTS_DIR"; then
+    log_pass "腳本目錄存在: $SCRIPTS_DIR"
 
     # 列出所有腳本
     SCRIPT_FILES=$(find "$SCRIPTS_DIR" -name "*.sh" -type f 2>/dev/null | sort)
@@ -165,14 +159,14 @@ if [ -d "$SCRIPTS_DIR" ]; then
 
     for SCRIPT in $SCRIPT_FILES; do
         SCRIPT_NAME=$(basename "$SCRIPT")
-        if [ -x "$SCRIPT" ]; then
+        if check_file_executable "$SCRIPT"; then
             echo -e "      ${GREEN}✓${NC} $SCRIPT_NAME (可執行)"
         else
             echo -e "      ${YELLOW}⚠${NC} $SCRIPT_NAME (無執行權限)"
         fi
     done
 else
-    echo -e "   ${RED}✗${NC} 腳本目錄不存在: $SCRIPTS_DIR"
+    log_fail "腳本目錄不存在: $SCRIPTS_DIR"
     ERRORS=$((ERRORS + 1))
 fi
 

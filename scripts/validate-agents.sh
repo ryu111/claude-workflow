@@ -4,14 +4,11 @@
 
 set -e
 
-# 顏色定義
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-# 取得腳本所在目錄，計算 agents 路徑
+# 載入共用函式庫
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/validate-utils.sh"
+
+# 計算路徑
 PLUGIN_DIR="$(dirname "$SCRIPT_DIR")"
 AGENTS_PATH="${1:-$PLUGIN_DIR/agents}"
 SKILLS_PATH="$PLUGIN_DIR/skills"
@@ -30,15 +27,12 @@ SKILLS_RESULTS=""
 TOOLS_RESULTS=""
 MISSING_SKILLS=""
 
-echo "🤖 Agents 驗證報告"
-echo "===================="
-echo ""
-echo "驗證路徑: $AGENTS_PATH"
-echo ""
+print_header "🤖 Agents 驗證報告"
+log_info "驗證路徑: $AGENTS_PATH"
 
 # 檢查 agents 目錄是否存在
-if [ ! -d "$AGENTS_PATH" ]; then
-    echo -e "${RED}錯誤: Agents 目錄不存在: $AGENTS_PATH${NC}"
+if ! check_dir_exists "$AGENTS_PATH"; then
+    log_fail "Agents 目錄不存在: $AGENTS_PATH"
     exit 1
 fi
 
@@ -65,12 +59,11 @@ for agent_file in "$AGENTS_PATH"/*.md; do
     agent_status="❌"
 
     # 1. 檢查 frontmatter 存在
-    if head -1 "$agent_file" | grep -q "^---$"; then
+    if check_frontmatter "$agent_file"; then
         has_frontmatter="✅"
 
-        # 提取 frontmatter 區塊 (從第一個 --- 到第二個 ---)
-        # macOS 相容：使用 awk 替代 head -n -1
-        frontmatter=$(awk '/^---$/{if(++c==2)exit}c==1' "$agent_file")
+        # 提取 frontmatter 區塊
+        frontmatter=$(extract_frontmatter "$agent_file")
 
         # 2. 檢查必要欄位
         if echo "$frontmatter" | grep -q "^name:"; then
@@ -106,7 +99,7 @@ for agent_file in "$AGENTS_PATH"/*.md; do
                 TOTAL_SKILLS_REFS=$((TOTAL_SKILLS_REFS + 1))
 
                 # 檢查 skill 是否存在
-                if [ -d "$SKILLS_PATH/$skill" ]; then
+                if check_dir_exists "$SKILLS_PATH/$skill"; then
                     valid_skill_count=$((valid_skill_count + 1))
                     VALID_SKILLS_REFS=$((VALID_SKILLS_REFS + 1))
                 else
@@ -144,45 +137,31 @@ for agent_file in "$AGENTS_PATH"/*.md; do
 done
 
 # 輸出報告
-echo "### 結構驗證"
+print_section "結構驗證"
 echo "| Agent | Frontmatter | name | description | 狀態 |"
 echo "|-------|:-----------:|:----:|:-----------:|:----:|"
 echo -e "$STRUCTURE_RESULTS"
 
-echo ""
-echo "### Skills 引用驗證"
+print_section "Skills 引用驗證"
 echo "| Agent | 引用數 | 有效 | 缺失 |"
 echo "|-------|:------:|:----:|:----:|"
 echo -e "$SKILLS_RESULTS"
 
 if [ -n "$MISSING_SKILLS" ]; then
-    echo ""
-    echo "### 缺失的 Skills"
+    print_section "缺失的 Skills"
     echo -e "$MISSING_SKILLS"
 fi
 
-echo ""
-echo "### Tools 配置"
+print_section "Tools 配置"
 echo "| Agent | 允許工具 | 禁止工具 |"
 echo "|-------|:--------:|:--------:|"
 echo -e "$TOOLS_RESULTS"
 
-echo ""
-echo "### 總結"
-echo "- Agents 總數：$TOTAL_AGENTS"
-echo "- 結構驗證通過：$PASSED_AGENTS"
-echo "- 結構驗證失敗：$FAILED_AGENTS"
+print_summary "$TOTAL_AGENTS" "$PASSED_AGENTS" "$FAILED_AGENTS" "Agents"
 echo "- Skills 引用總數：$TOTAL_SKILLS_REFS"
 echo "- 有效引用：$VALID_SKILLS_REFS"
 echo "- 缺失引用：$MISSING_SKILLS_REFS"
 
 # 設定退出碼
-if [ "$FAILED_AGENTS" -gt 0 ] || [ "$MISSING_SKILLS_REFS" -gt 0 ]; then
-    echo ""
-    echo -e "${YELLOW}⚠️ 發現問題，請檢查上方詳情${NC}"
-    exit 1
-else
-    echo ""
-    echo -e "${GREEN}✅ 所有驗證通過${NC}"
-    exit 0
-fi
+print_final_status "$((FAILED_AGENTS + MISSING_SKILLS_REFS))"
+exit $?

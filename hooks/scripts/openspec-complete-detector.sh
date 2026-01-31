@@ -16,10 +16,10 @@ if [ -d "./openspec/changes" ]; then
 
             if [ -f "$tasks_file" ]; then
                 # 計算未完成的任務
-                incomplete=$(grep -c "^\- \[ \]" "$tasks_file" 2>/dev/null || echo 0)
+                incomplete=$(grep -c "^\- \[ \]" "$tasks_file" 2>/dev/null | head -1 | tr -d '\n\r ' || echo "0")
 
                 if [ "$incomplete" -eq 0 ]; then
-                    total=$(grep -c "^\- \[" "$tasks_file" 2>/dev/null || echo 0)
+                    total=$(grep -c "^\- \[" "$tasks_file" 2>/dev/null | head -1 | tr -d '\n\r ' || echo "0")
 
                     if [ "$total" -gt 0 ]; then
                         echo "╔════════════════════════════════════════════════════════════════╗"

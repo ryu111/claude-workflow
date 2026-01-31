@@ -1,0 +1,147 @@
+# E2E-007: 狀態過期處理測試
+# 測試 30 分鐘狀態過期機制，以及過期後的阻擋行為
+
+id: E2E-007
+name: "狀態過期處理測試"
+description: "驗證 MEDIUM/HIGH 風險任務狀態過期後被阻擋，必須重新開始"
+
+# 模擬指令
+command: "規劃 API 權限管理 loop"
+alternative_commands:
+  - "建立 API 權限管理系統"
+  - "/plan API 權限管理"
+
+# 測試設定
+settings:
+  max_iterations: 6
+  timeout_minutes: 20
+  bypass_mode: false
+  risk_override: "HIGH"  # 強制 HIGH RISK
+  simulate_time_jump: true  # 模擬時間跳躍
+  time_jump_minutes: 35  # 跳躍 35 分鐘（超過 30 分鐘限制）
+
+# 預期行為
+expectations:
+  # 流程順序
+  flow:
+    - agent: developer
+      action: "實作權限邏輯"
+      risk_level: "HIGH"
+      expected_output_contains:
+        - "權限"
+        - "HIGH RISK"
+
+    - agent: time_simulator
+      action: "模擬時間跳躍 +35 分鐘"
+      internal: true
+
+    - agent: reviewer
+      action: "嘗試審查（應被阻擋）"
+      expected_result: "BLOCKED"
+      expected_error_contains:
+        - "state expired"
+        - "30 minutes"
+        - "restart required"
+
+    - agent: developer
+      action: "重新開始實作"
+      expected_output_contains:
+        - "重新開始"
+
+    - agent: reviewer
+      action: "審查新狀態"
+      expected_verdict: "APPROVE"
+
+    - agent: tester
+      action: "測試"
+      expected_result: "PASS"
+
+  # 狀態過期規則
+  expiry_rules:
+    timeout_minutes: 30
+    affected_risk_levels: ["MEDIUM", "HIGH"]
+    unaffected_risk_levels: ["LOW"]
+    action_on_expiry: "BLOCK"
+    require_restart: true
+
+  # 合規性
+  compliance:
+    min_rate: 90
+    max_violations: 1
+    violations_must_fix: true
+
+  # 最終狀態
+  final_state:
+    all_tasks_completed: true
+    no_expired_states: true
+    restart_count: 1  # 應該有 1 次重啟
+
+# 成功條件
+success_criteria:
+  - "過期狀態被正確偵測"
+  - "REVIEWER 被阻擋繼續"
+  - "錯誤訊息清楚說明過期原因"
+  - "重新開始後流程正常"
+  - "合規率 >= 90%"
+
+# 失敗條件
+failure_criteria:
+  - "過期狀態未被偵測"
+  - "REVIEWER 未被阻擋"
+  - "LOW RISK 被錯誤阻擋"
+  - "無法重新開始"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  # 驗證 E2E-007 測試結果
+
+  SESSION_ID="$1"
+  LOG_FILE=".claude/logs/session-${SESSION_ID}.log"
+
+  # 1. 檢查過期偵測
+  echo "檢查過期狀態偵測..."
+  if grep -q "state expired" "$LOG_FILE"; then
+    echo "✅ 過期狀態被偵測"
+  else
+    echo "❌ 未偵測到過期狀態"
+    exit 1
+  fi
+
+  # 2. 檢查 BLOCKED 訊息
+  echo "檢查阻擋訊息..."
+  if grep -q "BLOCKED.*expired" "$LOG_FILE"; then
+    echo "✅ REVIEWER 被正確阻擋"
+  else
+    echo "❌ 未發現阻擋記錄"
+    exit 1
+  fi
+
+  # 3. 檢查重新開始
+  echo "檢查重新開始..."
+  RESTART_COUNT=$(grep -c "重新開始\|restart" "$LOG_FILE")
+  if [ "$RESTART_COUNT" -ge 1 ]; then
+    echo "✅ 已重新開始 ($RESTART_COUNT 次)"
+  else
+    echo "❌ 未發現重新開始記錄"
+    exit 1
+  fi
+
+  # 4. 檢查最終完成
+  echo "檢查最終狀態..."
+  if grep -q "PASS" "$LOG_FILE" && grep -q "APPROVE" "$LOG_FILE"; then
+    echo "✅ 重新開始後流程正常完成"
+  else
+    echo "❌ 流程未正常完成"
+    exit 1
+  fi
+
+  # 5. 驗證 30 分鐘規則
+  echo "檢查過期時間..."
+  if grep -q "30 minutes" "$LOG_FILE"; then
+    echo "✅ 正確提示 30 分鐘規則"
+  else
+    echo "⚠️  未明確提示 30 分鐘規則"
+  fi
+
+  echo "✅ E2E-007 測試通過"

@@ -122,7 +122,7 @@ readonly LOW_RISK_EXTENSIONS="md|txt|rst|adoc"
 readonly HIGH_RISK_PATHS="auth|security|payment|api|migration|schema|secrets|\.github/workflows|\.gitlab|\.circleci|\.azure-pipelines"
 
 # HIGH: 敏感檔案類型（容器 + 資料庫 + CI/CD）
-readonly HIGH_RISK_FILES="Dockerfile|docker-compose|\.env|\.sql|\.prisma|gitlab-ci\.yml|azure-pipelines\.yml|bitbucket-pipelines\.yml|Jenkinsfile|\.travis\.yml|cloudbuild\.yaml"
+readonly HIGH_RISK_FILES="Dockerfile|docker-compose|\.env|\.sql|\.prisma|\.gitlab-ci\.yml|azure-pipelines\.yml|bitbucket-pipelines\.yml|Jenkinsfile|\.travis\.yml|cloudbuild\.yaml|\.github"
 
 # HIGH: 敏感關鍵字
 readonly HIGH_RISK_KEYWORDS="password|token|secret|credential|private\.key|api\.key|aws_access|ssh\.key"
@@ -545,9 +545,59 @@ case "$SUBAGENT_TYPE" in
                 exit 0
             fi
         else
+            # HIGH 風險變更必須有有效的 REVIEWER APPROVE 狀態
+            if [ "$RISK_LEVEL" = "HIGH" ] && ([ "$STATE_VALID" = false ] || [ "$LAST_AGENT" != "reviewer" ] || [ "$LAST_RESULT" != "approve" ]); then
+                # E2E 統計：記錄違規
+                record_e2e_violation "tester" "HIGH 風險變更缺少 REVIEWER APPROVE" "HIGH" "$CHANGE_ID"
+
+                echo "" >&2
+                echo "╔════════════════════════════════════════════════════════════════╗" >&2
+                echo "║                   ❌ 流程違規                                   ║" >&2
+                echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                echo "" >&2
+                echo "🔴 風險等級: HIGH（核心系統變更）" >&2
+                echo "🚫 HIGH 風險變更必須經過 REVIEWER 審查並 APPROVE" >&2
+                echo "" >&2
+                echo "📋 正確流程:" >&2
+                echo "   DEVELOPER → REVIEWER(APPROVE) → TESTER" >&2
+                echo "" >&2
+                echo "💡 請確保：" >&2
+                echo "   1. 已執行 DEVELOPER 實作" >&2
+                echo "   2. REVIEWER 已審查並 APPROVE" >&2
+                echo "   3. 流程狀態未過期" >&2
+                echo "" >&2
+                echo "{\"decision\":\"block\",\"reason\":\"HIGH 風險變更缺少 REVIEWER APPROVE\"}"
+                exit 0
+            fi
+            # MEDIUM 風險變更必須有有效的 REVIEWER APPROVE 狀態
+            if [ "$RISK_LEVEL" = "MEDIUM" ] && [ "$STATE_VALID" = true ] && ([ "$LAST_AGENT" != "reviewer" ] || [ "$LAST_RESULT" != "approve" ]); then
+                # E2E 統計：記錄違規
+                record_e2e_violation "tester" "MEDIUM 風險變更缺少 REVIEWER APPROVE" "MEDIUM" "$CHANGE_ID"
+
+                echo "" >&2
+                echo "╔════════════════════════════════════════════════════════════════╗" >&2
+                echo "║                   ❌ 流程違規                                   ║" >&2
+                echo "╚════════════════════════════════════════════════════════════════╝" >&2
+                echo "" >&2
+                echo "🟡 風險等級: MEDIUM（一般功能變更）" >&2
+                echo "🚫 MEDIUM 風險變更必須經過 REVIEWER 審查並 APPROVE" >&2
+                echo "" >&2
+                echo "📋 正確流程:" >&2
+                echo "   DEVELOPER → REVIEWER(APPROVE) → TESTER" >&2
+                echo "" >&2
+                echo "💡 請確保：" >&2
+                echo "   1. 已執行 DEVELOPER 實作" >&2
+                echo "   2. REVIEWER 已審查並 APPROVE" >&2
+                echo "" >&2
+                echo "{"decision":"block","reason":"MEDIUM 風險變更缺少 REVIEWER APPROVE"}"
+                exit 0
+            fi
+
+
             # 正常流程：REVIEWER → TESTER
             # E2E 統計：記錄合規
             record_e2e_compliance "tester" "$RISK_LEVEL" "$CHANGE_ID"
+
 
             echo "" >&2
             echo "╔════════════════════════════════════════════════════════════════╗" >&2

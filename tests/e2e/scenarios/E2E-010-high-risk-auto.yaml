@@ -1,0 +1,218 @@
+# E2E-010: 全自動 HIGH RISK 測試
+# 測試 HIGH RISK 流程在 TESTER PASS 後直接完成，無需人工確認
+
+id: E2E-010
+name: "全自動 HIGH RISK 測試"
+description: "驗證 HIGH RISK 流程 D→R(深度)→T(完整)→自動完成（無人工確認）"
+
+# 模擬指令
+command: "規劃 支付系統核心邏輯 loop"
+alternative_commands:
+  - "建立支付系統"
+  - "/plan 支付核心模組"
+
+# 測試設定
+settings:
+  max_iterations: 8
+  timeout_minutes: 20
+  bypass_mode: false
+  risk_override: "HIGH"
+  auto_complete_high_risk: true  # 自動完成 HIGH RISK（無人工確認）
+
+# 預期行為
+expectations:
+  # 流程順序
+  flow:
+    - agent: architect
+      action: "規劃支付系統"
+      expected_risk_level: "HIGH"
+      optional: true
+
+    - agent: developer
+      action: "實作支付邏輯"
+      expected_output_contains:
+        - "支付"
+        - "HIGH RISK"
+      expected_self_reflection:
+        - "安全性檢查"
+        - "資料驗證"
+        - "錯誤處理"
+
+    - agent: reviewer
+      action: "深度審查"
+      review_type: "enhanced"
+      expected_checks:
+        - "security_analysis"
+        - "performance_impact"
+        - "backward_compatibility"
+        - "rollback_plan"
+      expected_verdict: "APPROVE"
+      alternative_verdicts: ["APPROVE", "APPROVED"]
+
+    - agent: tester
+      action: "完整測試"
+      test_type: "comprehensive"
+      expected_test_suites:
+        - "unit_tests"
+        - "integration_tests"
+        - "security_tests"
+        - "edge_cases"
+      expected_result: "PASS"
+
+    - agent: system
+      action: "自動完成（無人工確認）"
+      expected_state: "completed"
+      no_manual_approval: true
+
+  # HIGH RISK 流程驗證
+  high_risk_workflow:
+    # 風險等級
+    risk_level: "HIGH"
+
+    # 強化審查
+    enhanced_review:
+      enabled: true
+      required_checks:
+        - "安全性分析"
+        - "效能影響評估"
+        - "向後相容性檢查"
+        - "回滾計劃"
+
+    # 完整測試
+    comprehensive_testing:
+      enabled: true
+      required_tests:
+        - "單元測試"
+        - "整合測試"
+        - "安全測試"
+        - "邊界測試"
+
+    # 自動完成（不需人工確認）
+    auto_completion:
+      enabled: true
+      triggers: ["TESTER_PASS"]
+      requires_manual_approval: false  # 關鍵：不需人工確認
+
+  # 合規性
+  compliance:
+    min_rate: 95  # HIGH RISK 要求更高合規率
+    max_violations: 0
+    violations_must_fix: true
+
+  # 最終狀態
+  final_state:
+    all_tasks_completed: true
+    risk_checks_passed: true
+    comprehensive_tests_passed: true
+    auto_completed: true  # 自動完成
+    no_manual_intervention: true  # 無人工介入
+
+# 成功條件
+success_criteria:
+  - "風險等級正確判定為 HIGH"
+  - "REVIEWER 執行強化審查"
+  - "TESTER 執行完整測試"
+  - "TESTER PASS 後自動完成"
+  - "無人工確認步驟"
+  - "合規率 >= 95%"
+  - "所有安全檢查通過"
+
+# 失敗條件
+failure_criteria:
+  - "風險等級判定錯誤"
+  - "REVIEWER 未執行強化審查"
+  - "TESTER 未執行完整測試"
+  - "TESTER PASS 後要求人工確認"
+  - "安全檢查不完整"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  # 驗證 E2E-010 測試結果
+
+  SESSION_ID="$1"
+  CHANGE_DIR="openspec/changes"
+  LOG_FILE=".claude/logs/session-${SESSION_ID}.log"
+
+  # 1. 檢查 HIGH RISK 判定
+  echo "檢查 HIGH RISK 判定..."
+  if grep -q "HIGH RISK\|HIGH.*RISK\|risk.*HIGH" "$LOG_FILE"; then
+    echo "✅ 正確判定為 HIGH RISK"
+  else
+    echo "❌ 未判定為 HIGH RISK"
+    exit 1
+  fi
+
+  # 2. 檢查強化審查
+  echo "檢查強化審查..."
+  ENHANCED_CHECKS=0
+  for check in "安全性" "效能" "相容性" "回滾"; do
+    if grep -qi "$check" "$LOG_FILE"; then
+      ENHANCED_CHECKS=$((ENHANCED_CHECKS + 1))
+    fi
+  done
+
+  if [ $ENHANCED_CHECKS -ge 3 ]; then
+    echo "✅ 執行強化審查（$ENHANCED_CHECKS/4 項檢查）"
+  else
+    echo "❌ 強化審查不完整（$ENHANCED_CHECKS/4）"
+    exit 1
+  fi
+
+  # 3. 檢查完整測試
+  echo "檢查完整測試..."
+  COMPREHENSIVE_TESTS=0
+  for test in "unit\|單元" "integration\|整合" "security\|安全" "edge\|邊界"; do
+    if grep -Eqi "$test.*test\|test.*$test" "$LOG_FILE"; then
+      COMPREHENSIVE_TESTS=$((COMPREHENSIVE_TESTS + 1))
+    fi
+  done
+
+  if [ $COMPREHENSIVE_TESTS -ge 2 ]; then
+    echo "✅ 執行完整測試（$COMPREHENSIVE_TESTS/4 類測試）"
+  else
+    echo "⚠️  測試覆蓋有限（$COMPREHENSIVE_TESTS/4）"
+  fi
+
+  # 4. 檢查自動完成（無人工確認）
+  echo "檢查自動完成..."
+  if grep -q "completed\|完成" "$LOG_FILE"; then
+    echo "✅ 任務已完成"
+  else
+    echo "❌ 任務未完成"
+    exit 1
+  fi
+
+  # 確認無人工確認步驟
+  if grep -qi "manual.*approval\|人工.*確認\|等待.*批准" "$LOG_FILE"; then
+    echo "❌ 發現人工確認步驟（不應存在）"
+    exit 1
+  else
+    echo "✅ 無人工確認步驟（正確）"
+  fi
+
+  # 5. 檢查最終狀態
+  echo "檢查最終狀態..."
+  STATE_FILE=$(find "$CHANGE_DIR" -name "*.state.json" | head -1)
+  if [ -f "$STATE_FILE" ]; then
+    STATE=$(jq -r '.state' "$STATE_FILE")
+    if [ "$STATE" = "completed" ]; then
+      echo "✅ 最終狀態正確: completed"
+    else
+      echo "❌ 最終狀態錯誤: $STATE"
+      exit 1
+    fi
+  fi
+
+  # 6. 檢查合規率
+  echo "檢查合規率..."
+  SUMMARY=$(source tests/e2e/lib/stats-aggregator.sh && aggregate_stats "$SESSION_ID")
+  RATE=$(echo "$SUMMARY" | grep -o '"compliance_rate":"[^"]*"' | cut -d'"' -f4 | tr -d '%')
+  if [ -n "$RATE" ] && [ "$RATE" -ge 95 ]; then
+    echo "✅ 合規率達標: ${RATE}%"
+  else
+    echo "❌ 合規率不足: ${RATE}%"
+    exit 1
+  fi
+
+  echo "✅ E2E-010 測試通過"

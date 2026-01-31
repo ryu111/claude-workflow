@@ -1,0 +1,193 @@
+# E2E-008: 並行競態條件測試
+# 測試多個並行任務同時執行時的狀態隔離和原子寫入
+
+id: E2E-008
+name: "並行競態條件測試"
+description: "驗證多個並行任務的狀態隔離、原子寫入、無競態條件"
+
+# 模擬指令
+command: "規劃 電商系統：用戶模組+商品模組+訂單模組 loop"
+alternative_commands:
+  - "建立三個獨立模組：用戶、商品、訂單"
+  - "/plan 電商系統三大模組"
+
+# 測試設定
+settings:
+  max_iterations: 15
+  timeout_minutes: 25
+  bypass_mode: false
+  risk_override: null
+  force_parallel: true  # 強制並行執行
+  concurrent_tasks: 3  # 3 個並行任務
+
+# 預期行為
+expectations:
+  # 流程順序
+  flow:
+    - agent: architect
+      action: "規劃三個並行模組"
+      expected_task_count: 3
+      expected_execution_mode: "parallel"
+
+    - agent: developer
+      action: "並行實作模組 1: 用戶"
+      parallel_group: 1
+      expected_state_file: "*.user-module.developer.state.json"
+
+    - agent: developer
+      action: "並行實作模組 2: 商品"
+      parallel_group: 1
+      expected_state_file: "*.product-module.developer.state.json"
+
+    - agent: developer
+      action: "並行實作模組 3: 訂單"
+      parallel_group: 1
+      expected_state_file: "*.order-module.developer.state.json"
+
+    - agent: reviewer
+      action: "並行審查所有模組"
+      parallel_group: 2
+      expected_verdict: "APPROVE"
+      expected_review_count: 3
+
+    - agent: tester
+      action: "並行測試所有模組"
+      parallel_group: 3
+      expected_result: "PASS"
+      expected_test_count: 3
+
+  # 並行驗證
+  concurrency_validation:
+    # 狀態隔離
+    state_isolation:
+      enabled: true
+      separate_state_files: true
+      no_state_leakage: true
+
+    # 原子寫入
+    atomic_writes:
+      enabled: true
+      no_partial_writes: true
+      no_corrupted_files: true
+
+    # 競態條件
+    race_conditions:
+      detect_conflicts: true
+      max_acceptable_conflicts: 0
+      conflict_resolution: "automatic"
+
+    # 執行順序
+    execution_order:
+      parallel_groups_sequential: true  # Group 1 → Group 2 → Group 3
+      within_group_parallel: true  # Group 內並行
+
+  # 合規性
+  compliance:
+    min_rate: 92
+    max_violations: 1
+    violations_must_fix: true
+
+  # 最終狀態
+  final_state:
+    all_tasks_completed: true
+    all_states_valid: true
+    no_state_corruption: true
+    no_orphaned_files: true
+
+# 成功條件
+success_criteria:
+  - "3 個任務並行執行"
+  - "每個任務有獨立狀態檔案"
+  - "狀態檔案無損壞"
+  - "無競態條件導致的錯誤"
+  - "所有模組正確完成"
+  - "合規率 >= 92%"
+
+# 失敗條件
+failure_criteria:
+  - "發現狀態檔案損壞"
+  - "發現部分寫入"
+  - "發現狀態洩漏（一個任務影響另一個）"
+  - "發現競態條件錯誤"
+  - "任務順序錯誤"
+
+# 驗證腳本
+validation_script: |
+  #!/bin/bash
+  # 驗證 E2E-008 測試結果
+
+  SESSION_ID="$1"
+  CHANGE_DIR="openspec/changes"
+
+  # 1. 檢查狀態檔案數量
+  echo "檢查狀態檔案..."
+  STATE_COUNT=$(find "$CHANGE_DIR" -name "*.state.json" | wc -l)
+  if [ "$STATE_COUNT" -ge 3 ]; then
+    echo "✅ 發現 $STATE_COUNT 個狀態檔案"
+  else
+    echo "❌ 狀態檔案數量不足: $STATE_COUNT"
+    exit 1
+  fi
+
+  # 2. 檢查狀態檔案完整性
+  echo "檢查狀態檔案完整性..."
+  CORRUPTED=0
+  for state in $CHANGE_DIR/*.state.json; do
+    if ! jq empty "$state" 2>/dev/null; then
+      echo "❌ 損壞的檔案: $state"
+      CORRUPTED=$((CORRUPTED + 1))
+    fi
+  done
+
+  if [ $CORRUPTED -eq 0 ]; then
+    echo "✅ 所有狀態檔案完整"
+  else
+    echo "❌ 有 $CORRUPTED 個損壞檔案"
+    exit 1
+  fi
+
+  # 3. 檢查 CHANGE_ID 唯一性（狀態隔離）
+  echo "檢查狀態隔離..."
+  CHANGE_IDS=$(jq -r '.change_id' $CHANGE_DIR/*.state.json | sort)
+  UNIQUE_IDS=$(echo "$CHANGE_IDS" | uniq)
+
+  if [ "$(echo "$CHANGE_IDS" | wc -l)" -eq "$(echo "$UNIQUE_IDS" | wc -l)" ]; then
+    echo "✅ 狀態隔離正確"
+  else
+    echo "❌ 發現狀態洩漏"
+    exit 1
+  fi
+
+  # 4. 檢查原子寫入（檔案大小 > 0）
+  echo "檢查原子寫入..."
+  PARTIAL=0
+  for state in $CHANGE_DIR/*.state.json; do
+    SIZE=$(wc -c < "$state")
+    if [ "$SIZE" -lt 10 ]; then
+      echo "❌ 部分寫入: $state (size: $SIZE)"
+      PARTIAL=$((PARTIAL + 1))
+    fi
+  done
+
+  if [ $PARTIAL -eq 0 ]; then
+    echo "✅ 所有檔案完整寫入"
+  else
+    echo "❌ 有 $PARTIAL 個部分寫入"
+    exit 1
+  fi
+
+  # 5. 檢查並行執行（時間戳應接近）
+  echo "檢查並行執行..."
+  TIMESTAMPS=$(jq -r '.timestamp' $CHANGE_DIR/*.developer.state.json | sort)
+  FIRST=$(echo "$TIMESTAMPS" | head -1)
+  LAST=$(echo "$TIMESTAMPS" | tail -1)
+
+  # 如果時間戳在 10 秒內，認為是並行
+  TIME_DIFF=$((LAST - FIRST))
+  if [ "$TIME_DIFF" -lt 10 ]; then
+    echo "✅ 任務並行執行（時間差: ${TIME_DIFF}s）"
+  else
+    echo "⚠️  任務可能非並行（時間差: ${TIME_DIFF}s）"
+  fi
+
+  echo "✅ E2E-008 測試通過"

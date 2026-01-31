@@ -26,8 +26,8 @@ if [ -d "./openspec/changes" ]; then
                 tasks_file="$change_dir/tasks.md"
 
                 if [ -f "$tasks_file" ]; then
-                    total=$(grep -c "^\- \[" "$tasks_file" 2>/dev/null || echo 0)
-                    completed=$(grep -c "^\- \[x\]" "$tasks_file" 2>/dev/null || echo 0)
+                    total=$(grep -c "^\- \[" "$tasks_file" 2>/dev/null | head -1 | tr -d '\n\r ' || echo "0")
+                    completed=$(grep -c "^\- \[x\]" "$tasks_file" 2>/dev/null | head -1 | tr -d '\n\r ' || echo "0")
 
                     if [ "$total" -gt 0 ]; then
                         percent=$((completed * 100 / total))
