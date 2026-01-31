@@ -48,20 +48,20 @@ DEVELOPER ─────► 自動驗證 ─────► 完成
 
 **流程：**
 ```
-DEVELOPER ─► REVIEWER ─► [MCP 測試生成] ─► TESTER
-    │            │              │              │
-    ▼            ▼              ▼              ▼
-  實作程式碼  APPROVE/REJECT  本地LLM生成     執行測試
-                              (Main Agent)   PASS/FAIL
+DEVELOPER ─► REVIEWER ─► TESTER ─────────────► [結果]
+    │            │           │                    │
+    ▼            ▼           ▼                    ▼
+  實作程式碼  APPROVE     [LOCAL] 呼叫 MCP      PASS/FAIL
+                          或 [HAIKU] 自行撰寫
 ```
 
-**MCP 測試生成（Main Agent 負責）：**
-REVIEWER APPROVE 後，Main Agent 使用本地 LLM 生成測試：
+**MCP 測試生成（TESTER 直接呼叫）：**
+REVIEWER APPROVE 後，TESTER 直接使用本地 LLM 生成測試：
 ```
 mcp__local-llm-mcp__generate_tests(code, language, framework)
 ```
-- 成功：將生成的測試傳給 TESTER 執行 → 標記 `[MCP]`
-- 失敗：TESTER 自行撰寫測試 → 標記 `[FALLBACK]`
+- 成功 → 標記 `[LOCAL]`
+- 失敗 → 自行撰寫 → 標記 `[HAIKU]`
 
 ### 🔴 HIGH RISK - 強化流程
 
