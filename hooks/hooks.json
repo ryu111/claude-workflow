@@ -6,13 +6,25 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/plugin-status-display.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session/plugin-status-display.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-state-init.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session/state-init.sh",
             "timeout": 2
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/health-check.sh",
+            "timeout": 5,
+            "statusMessage": "🧠 記憶系統健康檢查..."
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/inject-session-start.sh",
+            "timeout": 5,
+            "statusMessage": "📚 載入專案記憶..."
           }
         ]
       }
@@ -22,9 +34,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/keyword-detector.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/tools/keyword-detector.sh",
             "timeout": 5,
             "statusMessage": "🔍 分析指令中..."
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/inject-user-prompt.sh",
+            "timeout": 5,
+            "statusMessage": "🔍 載入相關記憶..."
           }
         ]
       }
@@ -35,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workflow-gate.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workflow/gate.sh",
             "timeout": 10,
             "statusMessage": "🔄 D→R→T 流程檢查中..."
           }
@@ -46,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/global-workflow-guard.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workflow/global-guard.sh",
             "timeout": 5,
             "statusMessage": "🔒 工作流守衛檢查中..."
           }
@@ -58,9 +76,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/agent-status-display.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/tools/agent-status-display.sh",
             "timeout": 5,
             "statusMessage": "⚡ 啟動 Agent..."
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/inject-subagent.sh",
+            "timeout": 5,
+            "statusMessage": "🎯 載入 Agent 專屬記憶..."
           }
         ]
       }
@@ -70,8 +94,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/subagent-validator.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/tools/subagent-validator.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/extract-implicit.sh",
+            "timeout": 10,
+            "statusMessage": "💡 提取隱式知識..."
           }
         ]
       }
@@ -81,7 +111,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/drt-completion-checker.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/workflow/completion-checker.sh",
             "timeout": 10
           }
         ]
@@ -92,8 +122,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/openspec-complete-detector.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/tools/openspec-complete-detector.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/precompact.sh",
+            "timeout": 10,
+            "statusMessage": "💾 儲存記憶快照..."
           }
         ]
       }
@@ -104,7 +140,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/auto-format.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/tools/auto-format.sh",
             "timeout": 10
           }
         ]
@@ -115,12 +151,30 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-state-cleanup.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session/state-cleanup.sh",
             "timeout": 2
           },
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-cleanup-report.sh",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/session-summary.sh",
+            "timeout": 10,
+            "statusMessage": "📊 生成 Session 摘要..."
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/decay.sh",
+            "timeout": 30,
+            "statusMessage": "⏳ 執行記憶衰退..."
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/memory/daily-backup.sh",
+            "timeout": 30,
+            "statusMessage": "💾 執行每日備份..."
+          },
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session/cleanup-report.sh",
             "timeout": 30
           }
         ]

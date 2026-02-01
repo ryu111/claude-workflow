@@ -5,6 +5,8 @@
 
 # Claude 狀態目錄（運行時生成）
 .claude/
+# 只保留記憶目錄結構的 .gitkeep 檔案
+!.claude/memory/**/.gitkeep
 
 # 編輯器
 *.swp
