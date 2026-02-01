@@ -11,7 +11,7 @@ source "${SCRIPT_DIR}/../core/common.sh"
 
 # 載入 memory-provenance（取得 session_id）
 if [ -z "${MEMORY_PROVENANCE_LOADED:-}" ]; then
-    source "${SCRIPT_DIR}/memory-provenance.sh"
+    source "${SCRIPT_DIR}/provenance.sh"
     readonly MEMORY_PROVENANCE_LOADED=1
 fi
 

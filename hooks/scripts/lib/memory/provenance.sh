@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # memory-provenance.sh - 記憶來源追蹤工具
 # 功能：追蹤記憶的來源（用戶明確、Agent 推論、系統生成）
-# 使用方式：source "$(dirname "${BASH_SOURCE[0]}")/lib/memory-provenance.sh"
+# 使用方式：source "$(dirname "${BASH_SOURCE[0]}")/provenance.sh"
 
 set -euo pipefail
 
@@ -236,7 +236,7 @@ show_provenance_help() {
 記憶來源追蹤工具 (Memory Provenance Tracker)
 
 用法:
-  source memory-provenance.sh
+  source hooks/scripts/lib/memory/provenance.sh
 
 函式:
   get_current_session_id

@@ -192,8 +192,8 @@ extract_key_sections() {
                 # 遇到下一個區段，停止
                 in_section=false
             else
-                # 提取內容（跳過空行過多、註解過多）
-                if [ -n "$line" ] || [ -n "$output" ]; then
+                # 提取內容（跳過空行和 HTML 註解）
+                if [ -n "$line" ] && [[ ! "$line" =~ ^[[:space:]]*\<!-- ]]; then
                     output+="$line"$'\n'
                 fi
             fi

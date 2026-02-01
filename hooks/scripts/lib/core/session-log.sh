@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # session-log.sh - Session 事件日誌工具
 # 功能：記錄結構化的 Session 事件到 JSONL 檔案
-# 使用方式：source "$(dirname "${BASH_SOURCE[0]}")/lib/session-log.sh"
+# 使用方式：source "$(dirname "${BASH_SOURCE[0]}")/lib/core/session-log.sh"
 
 set -euo pipefail
 
@@ -11,7 +11,7 @@ source "${SCRIPT_DIR}/common.sh"
 
 # 載入 memory-provenance（取得 session_id）
 if [ -z "${MEMORY_PROVENANCE_LOADED:-}" ]; then
-    source "${SCRIPT_DIR}/memory-provenance.sh"
+    source "${SCRIPT_DIR}/../memory/provenance.sh"
     readonly MEMORY_PROVENANCE_LOADED=1
 fi
 
